@@ -1,0 +1,59 @@
+version: '6.0.51.{BUILD}'
+
+image: Visual Studio 2019
+
+install:
+    - call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars32.bat"
+    - set ORANGEC=c:\OMAKE
+
+branches:
+   only:
+     - master
+     - /v\d*\.\d*\.\d*\.\d*/
+
+configuration:
+     - OMAKE
+
+for:
+-
+      matrix:
+            only:
+                - configuration: OMAKE
+      environment:
+          BUILD_PROFILE: MS
+      deploy:
+          release: OMAKE-(APPVEYOR_REPO_TAG_NAME)
+          description: 'Current Release'
+          provider: GitHub
+          auth_token:
+              secure: L2Uw6o1Msz3bAsw+p2n9bjxJqqtuP+7YuJNaWtpsRnWZ3JWDjkULQG6c6YRPk+v+
+          artifact: /.*/
+          draft: false
+          prerelease: false
+          on:
+              branch: /v\d*\.\d*\.\d*\.\d*/
+              APPVEYOR_REPO_TAG: true
+
+skip_commits:
+  files:
+    - '**/*.txt'
+    - '**/*.doc'
+    - '**/*.md'
+    - '**/*.html'
+ 
+build_script:
+# the appveyor virtual machine reported two processors, so, lets try running parallel compile!
+        - cmd: |
+              cd ..\..
+              move projects\omake .
+              mkdir \omake\temp
+              cd omake\src
+              call build.bat
+              cd ..\.. 
+              move omake projects
+              cd projects\omake
+
+artifacts:
+  - path: "dist\\*.*"
+    name: releasefiles
+

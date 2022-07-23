@@ -1,0 +1,3 @@
+this project is licensed under the GNU GPL, Version 3.
+
+See the file 'copying' for details

@@ -1,0 +1,56 @@
+<CC386PROJECT>
+	<VERSION ID="5"/>
+	<WORKAREA NAME="C:\orangec\src\omake.cwa"/>
+	<TARGET TITLE="omake">
+		<PROPERTIES>
+			<PROFILE NAME="WIN32" TYPE="DEBUG">
+				<PROP ID="__INCLUDE">..\Util</PROP>
+			</PROFILE>
+			<PROFILE NAME="WIN32" TYPE="RELEASE">
+				<PROP ID="__PROJECTTYPE">0</PROP>
+			</PROFILE>
+		</PROPERTIES>
+		<FILES>
+			<FOLDER TITLE="Include Files">
+				<FILE NAME="..\util\CmdFiles.h" TITLE="CmdFiles.h" CLEAN="0"/>
+				<FILE NAME="..\util\CmdSwitch.h" TITLE="CmdSwitch.h" CLEAN="0"/>
+				<FILE NAME="Depends.h" TITLE="Depends.h" CLEAN="0"/>
+				<FILE NAME="Eval.h" TITLE="Eval.h" CLEAN="0"/>
+				<FILE NAME="Include.h" TITLE="Include.h" CLEAN="0"/>
+				<FILE NAME="MakeMain.h" TITLE="MakeMain.h" CLEAN="0"/>
+				<FILE NAME="Maker.h" TITLE="Maker.h" CLEAN="0"/>
+				<FILE NAME="os.h" TITLE="os.h" CLEAN="0"/>
+				<FILE NAME="Parser.h" TITLE="Parser.h" CLEAN="0"/>
+				<FILE NAME="Rule.h" TITLE="Rule.h" CLEAN="0"/>
+				<FILE NAME="Runner.h" TITLE="Runner.h" CLEAN="0"/>
+				<FILE NAME="semaphores.h" TITLE="semaphores.h" CLEAN="0"/>
+				<FILE NAME="Spawner.h" TITLE="Spawner.h" CLEAN="0"/>
+				<FILE NAME="..\util\Utils.h" TITLE="Utils.h" CLEAN="0"/>
+				<FILE NAME="Variable.h" TITLE="Variable.h" CLEAN="0"/>
+				<FILE NAME="..\util\xml.h" TITLE="xml.h" CLEAN="0"/>
+			</FOLDER>
+			<FOLDER TITLE="Source Files">
+				<FILE NAME="..\util\CmdFiles.cpp" TITLE="CmdFiles.cpp" CLEAN="0"/>
+				<FILE NAME="..\util\CmdSwitch.cpp" TITLE="CmdSwitch.cpp" CLEAN="0"/>
+				<FILE NAME="..\util\crc.cpp" TITLE="crc.cpp" CLEAN="0"/>
+				<FILE NAME="Depends.cpp" TITLE="Depends.cpp" CLEAN="0"/>
+				<FILE NAME="Eval.cpp" TITLE="Eval.cpp" CLEAN="0"/>
+				<FILE NAME="Include.cpp" TITLE="Include.cpp" CLEAN="0"/>
+				<FILE NAME="MakeMain.cpp" TITLE="MakeMain.cpp" CLEAN="0"/>
+				<FILE NAME="Maker.cpp" TITLE="Maker.cpp" CLEAN="0"/>
+				<FILE NAME="os.cpp" TITLE="os.cpp" CLEAN="0"/>
+				<FILE NAME="Parser.cpp" TITLE="Parser.cpp" CLEAN="0"/>
+				<FILE NAME="Rule.cpp" TITLE="Rule.cpp" CLEAN="0"/>
+				<FILE NAME="Runner.cpp" TITLE="Runner.cpp" CLEAN="0"/>
+				<FILE NAME="Spawner.cpp" TITLE="Spawner.cpp" CLEAN="0"/>
+				<FILE NAME="..\util\UTF8.cpp" TITLE="UTF8.cpp" CLEAN="0"/>
+				<FILE NAME="..\util\UTF8.h" TITLE="UTF8.h" CLEAN="0"/>
+				<FILE NAME="..\util\UTF8Table.cpp" TITLE="UTF8Table.cpp" CLEAN="0"/>
+				<FILE NAME="..\util\UTF8Upper.cpp" TITLE="UTF8Upper.cpp" CLEAN="0"/>
+				<FILE NAME="..\util\Utils.cpp" TITLE="Utils.cpp" CLEAN="0"/>
+				<FILE NAME="Variable.cpp" TITLE="Variable.cpp" CLEAN="0"/>
+				<FILE NAME="..\util\winsystem.c" TITLE="winsystem.c" CLEAN="0"/>
+			</FOLDER>
+		</FILES>
+	</TARGET>
+</CC386PROJECT>
