@@ -6,14 +6,15 @@
     <LocalDebuggerCommandArguments>-j:4</LocalDebuggerCommandArguments>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <LocalDebuggerCommandArguments>-j:1</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>
+    </LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
     <LocalDebuggerWorkingDirectory>c:\orangec\tests\occpr</LocalDebuggerWorkingDirectory>
     <LocalDebuggerCommand>\orangec\bin\omake</LocalDebuggerCommand>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <LocalDebuggerCommandArguments>-j:4 -B</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>-B</LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerWorkingDirectory>\orangec\src\clibs</LocalDebuggerWorkingDirectory>
+    <LocalDebuggerWorkingDirectory>\orangec\tests</LocalDebuggerWorkingDirectory>
   </PropertyGroup>
 </Project>

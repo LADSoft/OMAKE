@@ -57,17 +57,17 @@ char* Utils::ShortName(const char* v)
 {
     static char prog_name[260], *short_name, *extension;
     StrCpy(prog_name, v);
-    short_name = strrchr(prog_name, '\\');
+    short_name = (char *)strrchr(prog_name, '\\');
     if (short_name == nullptr)
-        short_name = strrchr(prog_name, '/');
+        short_name = (char *)strrchr(prog_name, '/');
     if (short_name == nullptr)
-        short_name = strrchr(prog_name, ':');
+        short_name = (char *)strrchr(prog_name, ':');
     if (short_name)
         short_name++;
     else
         short_name = prog_name;
 
-    extension = strrchr(short_name, '.');
+    extension = (char *)strrchr(short_name, '.');
     if (extension != nullptr)
         *extension = '\0';
     return short_name;
@@ -127,7 +127,7 @@ bool Utils::GetLine(const char** text, std::string& buf)
     if (!**text)
         return false;
     char const* start = *text;
-    auto temp = strchr(*text, '\n');
+    auto temp = (char *)strchr(*text, '\n');
     if (!temp)
     {
         *text += strlen(*text);
@@ -158,7 +158,7 @@ void Utils::usage(const char* prog_name, const char* text)
         std::cerr << buf;
         if (--left == 0)
         {
-            fprintf(stderr, "Press <ENTER> to continue...");
+            std::cerr << "Press <ENTER> to continue...";
             char temp[512];
             fgets(temp, sizeof(temp), stdin);
             left = rows - 1;
@@ -186,11 +186,11 @@ void Utils::SetEnvironmentToPathParent(const char* name)
     {
         char buf[512];
         StrCpy(buf, GetModuleName());
-        char* p = strrchr(buf, '\\');
+        char* p = (char *)strrchr(buf, '\\');
         if (p)
         {
             *p = 0;
-            p = strrchr(buf, '\\');
+            p = (char *)strrchr(buf, '\\');
             if (p)
             {
                 *p = 0;
@@ -250,7 +250,7 @@ std::string Utils::QualifiedFile(const char* path, const char* ext)
 {
     char buf[260];
     Utils::StrCpy(buf, path);
-    char* p = strrchr(buf, '.');
+    char* p = (char *)strrchr(buf, '.');
     if (!p || (p != buf && p[-1] == '.') || p[1] == '\\')
         p = buf + strlen(buf);
     Utils::StrCpy(p, sizeof(buf) - (p - buf), ext);
@@ -311,7 +311,7 @@ std::string Utils::SearchForFile(const std::string& path, const std::string& nam
             current = fpath.substr(0, npos);
             fpath.erase(0, npos + 1);
         }
-        if (current[current.size()] != CmdFiles::DIR_SEP[0])
+        if (current[current.size()-1] != CmdFiles::DIR_SEP[0])
         {
             current += CmdFiles::DIR_SEP;
         }
@@ -329,8 +329,8 @@ bool Utils::HasLocalExe(const std::string& exeName)
 {
     char buf[10000];
     strcpy(buf, GetModuleName());
-    char* p = strrchr(buf, '/');
-    char* p1 = strrchr(buf, '\\');
+    char* p = (char *)strrchr(buf, '/');
+    char* p1 = (char *)strrchr(buf, '\\');
     if (p1 > p)
         p = p1;
     else if (!p)
@@ -381,6 +381,7 @@ bool Utils::iequal(const std::string& a, const std::string& b, int sz)
 FILE* Utils::TempName(std::string& name)
 {
     char tempFile[260];
+    tempFile[0] = 0;
     tmpnam(tempFile);
     if (tempFile[0] == '\\')
     {
@@ -396,6 +397,10 @@ FILE* Utils::TempName(std::string& name)
     {
         StrCpy(tempFile, ".\\");
         tmpnam(tempFile + strlen(tempFile));
+        // this next because it apparently isn't standard how to do the return value of tmpnam
+        const char *p = strrchr(tempFile, '\\');
+        strcpy(tempFile + 2, p);
+
         fil = fopen(tempFile, "w");
         if (!fil)
         {
@@ -411,7 +416,7 @@ FILE* Utils::TempName(std::string& name)
  */
 void Utils::AddExt(char* buffer, const char* ext)
 {
-    char* pos = strrchr(buffer, '.');
+    char* pos = (char *)strrchr(buffer, '.');
     if (!pos || (*(pos - 1) == '.') || (*(pos + 1) == '\\'))
         strcat(buffer, ext);
 }
@@ -421,7 +426,7 @@ void Utils::AddExt(char* buffer, const char* ext)
  */
 void Utils::StripExt(char* buffer)
 {
-    char* pos = strrchr(buffer, '.');
+    char* pos = (char *)strrchr(buffer, '.');
     if (pos && (*(pos - 1) != '.'))
         *pos = 0;
 }

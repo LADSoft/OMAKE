@@ -32,6 +32,20 @@
 #include <cstdlib>
 #include <cstring>
 
+
+
+#ifdef __ORANGEC__
+#ifndef __LSCRTL_DLL
+#include <windows.h>
+#include <..\version.h>
+extern "C" void _RTL_FUNC __excepthook()
+{
+    printf("version: " STRING_VERSION "\n");
+    printf("Command Line: %s\n", GetCommandLineA());
+}
+#endif
+#endif
+
 CmdSwitchBase::CmdSwitchBase(CmdSwitchParser& parser, char SwitchChar, std::deque<std::string> LongNames) :
     exists(false), switchChar(SwitchChar), longNames(LongNames)
 {
@@ -237,9 +251,9 @@ char* CmdSwitchFile::GetStr(char* data)
     *p = 0;
     if (quote && *data)
         data++;
-    while ((p = strstr(buf, "%")))
+    while ((p = (char *)strstr(buf, "%")))
     {
-        char* q = strchr(p + 1, '%');
+        char* q = (char *)strchr(p + 1, '%');
         if (q)
         {
             int len = q + 1 - p;

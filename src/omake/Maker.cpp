@@ -268,8 +268,11 @@ std::unique_ptr<Depends> Maker::Dependencies(const std::string& goal, const std:
                     GetFileTime(goal, preferredPath, time);
                     if (!time)
                     {
-                        missingTarget = true;
-                        Eval::error("No rule to make target '" + goal + "'", file, line);
+                        if (!RuleContainer::Instance()->OnList(goal, ".PHONY"))
+                        {
+                            missingTarget = true;
+                            Eval::error("No rule to make target '" + goal + "'", file, line);
+                        }
                     }
                     else if (time > timeval)
                         timeval = time;
@@ -632,6 +635,7 @@ int Maker::RunCommands(bool keepGoing)
                 rv = rv1;
             if (rv > 0)
             {
+                stop = true;
                 if (!keepGoing)
                 {
                     Spawner::Stop();
@@ -650,6 +654,7 @@ int Maker::RunCommands(bool keepGoing)
                 rv = rv1;
             if (rv > 0)
             {
+                stop = true;
                 if (!keepGoing)
                 {
                     Spawner::Stop();
