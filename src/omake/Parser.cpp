@@ -30,7 +30,7 @@
 #include "Include.h"
 #include "Maker.h"
 #include "UTF8.h"
-#include <ctype.h>
+#include <cctype>
 #include <fstream>
 #include <iostream>
 #include <algorithm>
@@ -318,7 +318,7 @@ bool Parser::ParseLine(const std::string& line)
         {
             if (eq != std::string::npos && colon == eq - 1)
             {
-                rv = ParseAssign(iline.substr(0, colon), iline.substr(eq + 1), dooverride);
+                rv = ParseAssign(iline.substr(0, colon), iline.substr(eq + 1), dooverride, false);
             }
             else
             {
@@ -331,15 +331,15 @@ bool Parser::ParseLine(const std::string& line)
         {
             if (q != std::string::npos && q == eq - 1)
             {
-                rv = ParseQuestionAssign(iline.substr(0, q), iline.substr(eq + 1), dooverride);
+                rv = ParseQuestionAssign(iline.substr(0, q), iline.substr(eq + 1), dooverride, false);
             }
             else if (r != std::string::npos && r == eq - 1)
             {
-                rv = ParsePlusAssign(iline.substr(0, r), iline.substr(eq + 1), dooverride);
+                rv = ParsePlusAssign(iline.substr(0, r), iline.substr(eq + 1), dooverride, false);
             }
             else
             {
-                rv = ParseRecursiveAssign(iline.substr(0, eq), iline.substr(eq + 1), dooverride);
+                rv = ParseRecursiveAssign(iline.substr(0, eq), iline.substr(eq + 1), dooverride, false);
             }
         }
         else
@@ -356,7 +356,7 @@ bool Parser::ParseLine(const std::string& line)
     }
     return rv;
 }
-bool Parser::ParseAssign(const std::string& left, const std::string& right, bool dooverride, RuleList* ruleList)
+bool Parser::ParseAssign(const std::string& left, const std::string& right, bool dooverride, bool exportSpecific, std::shared_ptr<RuleList> ruleList)
 {
     if (left == ".VARIABLES")
         return true;
@@ -385,9 +385,11 @@ bool Parser::ParseAssign(const std::string& left, const std::string& right, bool
     }
     if (v && !ruleList && (left == "MAKEFILES" || autoExport))
         v->SetExport(true);
+    else if (v && ruleList)
+        v->SetExport(exportSpecific);
     return true;
 }
-bool Parser::ParseRecursiveAssign(const std::string& left, const std::string& right, bool dooverride, RuleList* ruleList)
+bool Parser::ParseRecursiveAssign(const std::string& left, const std::string& right, bool dooverride, bool exportSpecific, std::shared_ptr<RuleList> ruleList)
 {
     if (left == ".VARIABLES")
         return true;
@@ -413,11 +415,13 @@ bool Parser::ParseRecursiveAssign(const std::string& left, const std::string& ri
         else
             *VariableContainer::Instance() += v;
     }
-    if (v && !ruleList && (left == "MAKEFILES" || autoExport))
+    if (v && !(bool)ruleList && (left == "MAKEFILES" || autoExport))
         v->SetExport(true);
+    else if (v && (bool)ruleList)
+        v->SetExport(exportSpecific);
     return true;
 }
-bool Parser::ParsePlusAssign(const std::string& left, const std::string& right, bool dooverride, RuleList* ruleList)
+bool Parser::ParsePlusAssign(const std::string& left, const std::string& right, bool dooverride, bool exportSpecific, std::shared_ptr<RuleList> ruleList)
 {
     if (left == ".VARIABLES")
         return true;
@@ -450,9 +454,11 @@ bool Parser::ParsePlusAssign(const std::string& left, const std::string& right, 
     }
     if (v && !ruleList && (left == "MAKEFILES" || autoExport))
         v->SetExport(true);
+    else if (v && ruleList)
+        v->SetExport(exportSpecific);
     return true;
 }
-bool Parser::ParseQuestionAssign(const std::string& left, const std::string& right, bool dooverride, RuleList* ruleList)
+bool Parser::ParseQuestionAssign(const std::string& left, const std::string& right, bool dooverride, bool exportSpecific, std::shared_ptr<RuleList> ruleList)
 {
     if (left == ".VARIABLES")
         return true;
@@ -476,6 +482,8 @@ bool Parser::ParseQuestionAssign(const std::string& left, const std::string& rig
     }
     if (v && !ruleList && (left == "MAKEFILES" || autoExport))
         v->SetExport(true);
+    else if (v && ruleList)
+        v->SetExport(exportSpecific);
     return true;
 }
 std::string Parser::ReplaceAllStems(const std::string& stem, const std::string value)
@@ -516,6 +524,7 @@ bool Parser::ParseRule(const std::string& left, const std::string& line)
     bool make = false;
     bool notMain = false;
     bool precious = false;
+    bool builtin = false;
     std::string iline;
     bool hasCmd = false;
     if (line[0] == ':')
@@ -538,6 +547,9 @@ bool Parser::ParseRule(const std::string& left, const std::string& line)
     size_t p = UnfetteredChar(line, ';');
     if (n != 0 && n != std::string::npos && (p == std::string::npos || n < p))
     {
+        size_t q = 0;
+        std::string first = FirstWord(line, q);
+        bool private_ = first != "export";
         enum e_mode
         {
             asn,
@@ -562,31 +574,33 @@ bool Parser::ParseRule(const std::string& left, const std::string& line)
         {
             l = line.substr(0, n - 1);
         }
+        if (first == "private" || first == "export")
+            l = l.substr(q);
         Eval l1(l, false);
         l = l1.strip(l);
         r = line.substr(n + 1);
         while (!ls.empty() && rv)
         {
             std::string cur = Eval::ExtractFirst(ls, std::string(" "));
-            RuleList* ruleList = RuleContainer::Instance()->Lookup(cur);
+            std::shared_ptr<RuleList> ruleList = RuleContainer::Instance()->Lookup(cur);
             if (!ruleList)
             {
-                ruleList = new RuleList(cur);
+                ruleList = std::make_shared<RuleList>(cur);
                 *RuleContainer::Instance() += ruleList;
             }
             switch (mode)
             {
                 case rasn:
-                    rv &= ParseRecursiveAssign(l, r, false, ruleList);
+                    rv &= ParseRecursiveAssign(l, r, false, !private_, ruleList);
                     break;
                 case pasn:
-                    rv &= ParsePlusAssign(l, r, false, ruleList);
+                    rv &= ParsePlusAssign(l, r, false, !private_, ruleList);
                     break;
                 case qasn:
-                    rv &= ParseQuestionAssign(l, r, false, ruleList);
+                    rv &= ParseQuestionAssign(l, r, false, !private_, ruleList);
                     break;
                 case asn:
-                    rv &= ParseAssign(l, r, false, ruleList);
+                    rv &= ParseAssign(l, r, false, !private_, ruleList);
                     break;
             }
         }
@@ -596,7 +610,7 @@ bool Parser::ParseRule(const std::string& left, const std::string& line)
         size_t m = ls.find_first_not_of(' ');
         if (m != std::string::npos && ls[m] == '.')
         {
-            RuleList* ruleList = RuleContainer::Instance()->Lookup(".SUFFIXES");
+            std::shared_ptr<RuleList> ruleList = RuleContainer::Instance()->Lookup(".SUFFIXES");
             bool found1 = false, found2 = false;
             n = ls.find_first_of('.', m + 1);
             std::string one;
@@ -684,6 +698,8 @@ bool Parser::ParseRule(const std::string& left, const std::string& line)
                     make = true;
                 else if (cur == ".PRECIOUS")
                     precious = true;
+                else if (cur == ".__BUILTIN")
+                    builtin = true;
                 else if (cur == ".EXEC" || cur == ".EXPORT" || cur == ".EXPORTSAME" || cur == ".INVISIBLE" || cur == ".JOIN" ||
                          cur == ".NOEXPORT" || cur == ".USE" || cur == ".WAIT")
                     Eval::warning(std::string("Target Attribute '") + cur + "' ignored");
@@ -723,7 +739,7 @@ bool Parser::ParseRule(const std::string& left, const std::string& line)
                 }
             }
         }
-        lastCommand = new Command(file, lineno + 1);
+        lastCommand = std::make_shared<Command>(file, lineno + 1);
         *CommandContainer::Instance() += lastCommand;
         if (hasCmd)
             *lastCommand += command;
@@ -744,7 +760,7 @@ bool Parser::ParseRule(const std::string& left, const std::string& line)
         {
             std::string cur = Eval::ExtractFirst(ls, std::string(" "));
             std::string stem;
-            Rule* rule = NULL;
+            std::shared_ptr<Rule> rule = NULL;
             std::string ps1;
             if ((cur == ".SECONDARY" || cur == ".IGNORE") && ps == "" && os == "")
                 ps1 = "%";
@@ -753,7 +769,7 @@ bool Parser::ParseRule(const std::string& left, const std::string& line)
             if (ps.empty() && cur == ".SUFFIXES")
             {
                 // clears all rules...
-                RuleList* ruleList = RuleContainer::Instance()->Lookup(cur);
+                std::shared_ptr<RuleList> ruleList = RuleContainer::Instance()->Lookup(cur);
                 if (ruleList)
                     *RuleContainer::Instance() -= ruleList;
             }
@@ -769,7 +785,7 @@ bool Parser::ParseRule(const std::string& left, const std::string& line)
                         ps2 = ReplaceAllStems(stem, ps2);
                         std::string os1 = os;
                         os1 = ReplaceAllStems(stem, os1);
-                        rule = new Rule(cur, ps2, os1, lastCommand, file, lineno, dontCare, ignore, silent, make, precious,
+                        rule = std::make_shared<Rule>(cur, ps2, os1, lastCommand, file, lineno, dontCare, ignore, silent, make, precious,
                                         secondaryExpansionEnabled);
                     }
                     else
@@ -779,19 +795,22 @@ bool Parser::ParseRule(const std::string& left, const std::string& line)
                 }
                 else
                 {
-                    rule = new Rule(cur, ps1, os, lastCommand, file, lineno, dontCare, ignore, silent, make, precious,
-                                    secondaryExpansionEnabled);
+                    rule = std::make_shared<Rule>(cur, ps1, os, lastCommand, file, lineno, dontCare, ignore, silent, make, precious,
+                                    secondaryExpansionEnabled, !orderPrereqs.empty() || !prereqs.empty());
                 }
-                RuleList* ruleList = RuleContainer::Instance()->Lookup(cur);
+                std::shared_ptr<RuleList> ruleList = RuleContainer::Instance()->Lookup(cur);
                 if (!ruleList)
                 {
-                    ruleList = new RuleList(cur);
+                    ruleList = std::make_shared<RuleList>(cur);
                     ruleList->SetRelated(related);
                     *RuleContainer::Instance() += ruleList;
                 }
                 ruleList->SetTargetPatternStem(stem);
                 if (rule)
+                {
+                    rule->SetBuiltin(builtin);
                     ruleList->Add(rule, Double);
+                }
             }
         }
     }
@@ -869,28 +888,21 @@ bool Parser::ParseCommand(const std::string& line)
     {
         size_t n = line.find("&&");
         *lastCommand += line;
-        if (n != std::string::npos && n != line.size() - 2)
+        if (n != std::string::npos && n == line.size() - 3)
         {
-            // disable the temporary command files for /bin/sh
-            Variable* v = VariableContainer::Instance()->Lookup("SHELL");
-            if (v)
+            // this handles && as a temporary command file marker
+            // note that we are not supporting it if you use a line continuation in conjunction with it and it must be the last thing on a line
+            char match = line[n + 2];
+            bool found = false;
+            while (!remaining.empty() && !found)
             {
-                std::string shell = v->GetValue();
-                if (shell != "/bin/sh")
-                {
-                    char match = line[n + 2];
-                    bool found = false;
-                    while (!remaining.empty() && !found)
-                    {
-                        std::string iline = GetLine(false);
-                        *lastCommand += iline;
-                        found = iline.find(match) != std::string::npos;
-                    }
-                    if (!found)
-                    {
-                        Eval::error("End of file detected while processing temporary command file");
-                    }
-                }
+                std::string iline = GetLine(false);
+                *lastCommand += iline;
+                found = iline.find(match) != std::string::npos;
+            }
+            if (!found)
+            {
+                Eval::error("End of file detected while processing temporary command file");
             }
         }
     }
@@ -1039,9 +1051,30 @@ bool Parser::ParseElse(const std::string& line)
         bool b = skips.front();
         skips.pop_front();
         if (!skips.empty() && skips.front())
-            skips.push_front(true);
-        else
-            skips.push_front(!b);
+            b = false;
+        if (b)
+        {
+            size_t n;
+            std::string line1 = line;
+            std::string firstWord = FirstWord(line1, n);
+            if (firstWord == "ifeq")
+            {
+                return ParseCond(line1.substr(n), true);
+            }
+            else if (firstWord == "ifneq")
+            {
+                return ParseCond(line1.substr(n), false);
+            }
+            else if (firstWord == "ifdef")
+            {
+                return ParseDef(line1.substr(n), true);
+            }
+            else if (firstWord == "ifndef")
+            {
+                return ParseDef(line1.substr(n), false);
+            }
+        }
+        skips.push_front(!b);
     }
     return rv;
 }

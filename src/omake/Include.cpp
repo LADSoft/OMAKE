@@ -31,7 +31,7 @@
 #include "Rule.h"
 #include <fstream>
 #include <iostream>
-#include <string.h>
+#include <cstring>
 #include <algorithm>
 #ifdef HAVE_UNISTD_H
 #    include <unistd.h>
@@ -170,23 +170,40 @@ bool Include::AddFileList(const std::string& name, bool ignoreOk, bool MakeFile)
         }
         else
         {
-            cmdFiles.AddFromPath(current, includeDirs);
+            auto includes = includeDirs;
+            if (!currentPath.empty() && current[0] == '.')
+            {
+                includes = currentPath.top() + CmdFiles::PATH_SEP + includes;
+            }
+            cmdFiles.AddFromPath(current, includes);
         }
     }
-    for (auto it = cmdFiles.FileNameBegin(); rv && it != cmdFiles.FileNameEnd(); ++it)
+    for (auto it = cmdFiles.begin(); rv && it != cmdFiles.end(); ++it)
     {
+        auto name = *it;
         Variable* v = VariableContainer::Instance()->Lookup("MAKEFILE_LIST");
         if (!v)
         {
-            v = new Variable(std::string("MAKEFILE_LIST"), (*it), Variable::f_simple, Variable::o_file);
+            v = new Variable(std::string("MAKEFILE_LIST"), name, Variable::f_simple, Variable::o_file);
             *VariableContainer::Instance() += v;
         }
         else
         {
-            v->SetValue(v->GetValue() + " " + (*it));
+            v->SetValue(v->GetValue() + " " + name);
         }
-        files.push_back((*it));
-        rv &= Parse((*it), ignoreOk || MakeFile, MakeFile);
+        files.push_back(name);
+        auto path = name;
+        int n = path.find_last_of("/\\");
+        if (n != std::string::npos)
+        {
+            path = path.substr(0, n);
+            currentPath.push(path);
+        }
+        rv &= Parse(name, ignoreOk || MakeFile, MakeFile);
+        if (n != std::string::npos)
+        {
+            currentPath.pop();
+        }
     }
     return rv;
 }
@@ -202,6 +219,7 @@ bool Include::MakeMakefiles(bool Silent, OutputType outputType, bool& didSomethi
     {
         maker.SetIgnoreFailed(file);
     }
-    didSomething = !maker.CreateDependencyTree();
+    maker.CreateDependencyTree();
+    didSomething = maker.GoalCount() > files.size();
     return maker.RunCommands();
 }

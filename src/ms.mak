@@ -48,9 +48,9 @@ LLIB_DEPENDENCIES := $(notdir $(filter-out $(addsuffix .obj,$(EXCLUDE)) $(MAIN_D
 
 CC=cl.exe
 ifneq "$(MSPDB)" ""
-CCFLAGS =/Od /Zi /FS /EHs /c /nologo /MTd
+CCFLAGS =/Od /Zi /FS /EHs /c /nologo /MTd -DTARGET_OS_WINDOWS
 else
-CCFLAGS = /O2 /EHs /c /nologo /MT
+CCFLAGS = /O2 /EHs /c /nologo /MT -DTARGET_OS_WINDOWS
 endif
 
 LINK=link.exe

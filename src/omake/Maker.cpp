@@ -33,7 +33,7 @@
 #include "Utils.h"
 #include <fstream>
 #include <list>
-#include <stdlib.h>
+#include <cstdlib>
 #include <iostream>
 #include <algorithm>
 #include <unordered_set>
@@ -59,7 +59,7 @@ Maker::Maker(bool Silent, bool DisplayOnly, bool IgnoreResults, bool Touch, Outp
     Variable* v = VariableContainer::Instance()->Lookup("SHELL");
     std::string shtest = v->GetValue();
     std::transform(shtest.begin(), shtest.end(), shtest.begin(), ::toupper);
-    OS::SetSHEXE(shtest.find("SH.EXE") != std::string::npos);
+    OS::SetSHEXE(shtest.find("SH.EXE") != std::string::npos || shtest.find("BASH.EXE") != std::string::npos);
 }
 Maker::~Maker() {}
 void Maker::SetFirstGoal(const std::string& name)
@@ -138,7 +138,7 @@ bool Maker::CreateDependencyTree()
         dependsNesting = 0;
         if (goal != ".MAKEFLAGS" && goal != ".MFLAGS")
         {
-            auto t = Dependencies(goal, "", tv1, true, "", -1);
+            auto t = Dependencies(goal, "", tv1, true, true, "", -1);
             if (t)
             {
                 depends.push_back(std::move(t));
@@ -153,7 +153,7 @@ bool Maker::CreateDependencyTree()
     return !missingTarget;
 }
 std::unique_ptr<Depends> Maker::Dependencies(const std::string& goal, const std::string& preferredPath, Time& timeval, bool err,
-                                             std::string file, int line)
+                                             bool top, std::string file, int line)
 {
     if (++dependsNesting > 200)
     {
@@ -170,7 +170,7 @@ std::unique_ptr<Depends> Maker::Dependencies(const std::string& goal, const std:
     if (!rv)
     {
         Time xx;
-        RuleList* ruleList = RuleContainer::Instance()->Lookup(goal);
+        std::shared_ptr<RuleList> ruleList = RuleContainer::Instance()->Lookup(goal);
         bool remake = false;
         if (ruleList)
         {
@@ -178,7 +178,9 @@ std::unique_ptr<Depends> Maker::Dependencies(const std::string& goal, const std:
             for (it = ruleList->begin(); it != ruleList->end(); ++it)
             {
                 if ((*it)->HasCommands())
+                {
                     break;
+                }
             }
             if (it == ruleList->end())
             {
@@ -188,17 +190,21 @@ std::unique_ptr<Depends> Maker::Dependencies(const std::string& goal, const std:
             std::string foundPath = GetFileTime(goal, preferredPath, goalTime);
             bool exists = !!goalTime;
             rv = std::make_unique<Depends>(goal, xx, intermediate && !precious && !secondary);
-            Rule* executionRule = nullptr;
+            std::shared_ptr<Rule> executionRule = nullptr;
             std::string newerPrereqs;
+            bool hasPrerequisites = false;
             for (auto& rule : *ruleList)
             {
+                hasPrerequisites |= rule->HasPrereq();
                 std::string working = rule->GetPrerequisites();
                 bool remakeThis = false;
                 while (!working.empty())
                 {
                     Time current;
                     std::string thisOne = Eval::ExtractFirst(working, " ");
-                    auto dp = Dependencies(thisOne, foundPath, current, err && !rule->IsDontCare(), rule->File(), rule->Line());
+                    auto dp = Dependencies(thisOne, foundPath, current, err && !rule->IsDontCare(), false, rule->File(), rule->Line());
+                    auto dependentRuleList = RuleContainer::Instance()->Lookup(thisOne);
+                    ruleList->CopyExports(dependentRuleList);
                     if (current > dependsTime)
                     {
                         dependsTime = current;
@@ -226,7 +232,9 @@ std::unique_ptr<Depends> Maker::Dependencies(const std::string& goal, const std:
                     if (!exists)
                     {
                         auto dp =
-                            Dependencies(thisOne, preferredPath, current, err && !rule->IsDontCare(), rule->File(), rule->Line());
+                            Dependencies(thisOne, preferredPath, current, err && !rule->IsDontCare(), false, rule->File(), rule->Line());
+                        auto dependentRuleList = RuleContainer::Instance()->Lookup(thisOne);
+                        ruleList->CopyExports(dependentRuleList);
                         if (dp)
                         {
                             dp->SetOrdered(true);
@@ -240,7 +248,7 @@ std::unique_ptr<Depends> Maker::Dependencies(const std::string& goal, const std:
                         if (executionRule)
                             Eval::warning("Conflicting command lists for goal '" + goal + "'", rule->File(), rule->Line());
                         else
-                            executionRule = rule.get();
+                            executionRule = rule;
                     }
             }
             if (executionRule)
@@ -251,6 +259,8 @@ std::unique_ptr<Depends> Maker::Dependencies(const std::string& goal, const std:
             }
             else
             {
+                if (!hasPrerequisites && top)
+                    std::cout << "omake: Nothing to be done for '" << goal << "'." << std::endl;
                 rv->SetRuleList(ruleList);
             }
         }
@@ -258,7 +268,7 @@ std::unique_ptr<Depends> Maker::Dependencies(const std::string& goal, const std:
         {
             if (SearchImplicitRules(goal, preferredPath, true, timeval))
             {
-                rv = Dependencies(goal, preferredPath, timeval, err, file, line);
+                rv = Dependencies(goal, preferredPath, timeval, err, false, file, line);
             }
             else if (err)
             {
@@ -367,7 +377,7 @@ std::string Maker::GetFileTime(const std::string& goal, const std::string& prefe
     }
     return rv;
 }
-bool Maker::ExistsOrMentioned(const std::string& stem, RuleList* ruleList, const std::string& preferredPath, const std::string& dir,
+bool Maker::ExistsOrMentioned(const std::string& stem, std::shared_ptr<RuleList>& ruleList, const std::string& preferredPath,
                               bool implicit, bool outerMost)
 {
     bool found = true;
@@ -376,7 +386,7 @@ bool Maker::ExistsOrMentioned(const std::string& stem, RuleList* ruleList, const
         std::string working = (*itr)->GetPrerequisites();
         while (!working.empty() && found)
         {
-            std::string thisOne = dir + Eval::ExtractFirst(working, " ");
+            std::string thisOne = Eval::ExtractFirst(working, " ");
             thisOne = Eval::ReplaceStem(stem, thisOne);
             Time theTime;
             if (RuleContainer::Instance()->find(thisOne) != RuleContainer::Instance()->end())
@@ -407,25 +417,25 @@ bool Maker::ExistsOrMentioned(const std::string& stem, RuleList* ruleList, const
     if (found)
     {
         // ok this is a match...
-        EnterSpecificRule(ruleList, stem, preferredPath, dir, outerMost);
+        EnterSpecificRule(ruleList, stem, preferredPath, outerMost);
     }
     return found;
 }
-void Maker::EnterSpecificRule(RuleList* l, const std::string& stem, const std::string& preferredPath, const std::string& dir,
+void Maker::EnterSpecificRule(std::shared_ptr<RuleList>& l, const std::string& stem, const std::string& preferredPath,
                               bool outerMost)
 {
     Time theTime;
-    std::string target = dir + Eval::ReplaceStem(stem, l->GetTarget());
-    RuleList* ruleList = RuleContainer::Instance()->Lookup(target);
+    std::string target = Eval::ReplaceStem(stem, l->GetTarget());
+    std::shared_ptr<RuleList> ruleList = RuleContainer::Instance()->Lookup(target);
     if (!ruleList)
     {
-        ruleList = new RuleList(target);
+        ruleList = std::make_shared<RuleList>(target);
         *RuleContainer::Instance() += ruleList;
         ruleList->SetTargetPatternStem(stem);
     }
     std::string orderPrereq;
     std::string prereq;
-    Command* commands = nullptr;
+    std::shared_ptr<Command> commands = nullptr;
     for (auto& rule : *l)
     {
         if (!commands)
@@ -433,7 +443,7 @@ void Maker::EnterSpecificRule(RuleList* l, const std::string& stem, const std::s
         std::string working = rule->GetPrerequisites();
         while (!working.empty())
         {
-            std::string thisOne = dir + Eval::ExtractFirst(working, " ");
+            std::string thisOne = Eval::ExtractFirst(working, " ");
             thisOne = Eval::ReplaceStem(stem, thisOne);
             thisOne = GetFileTime(thisOne, preferredPath, theTime) + thisOne;
             if (!prereq.empty())
@@ -443,7 +453,7 @@ void Maker::EnterSpecificRule(RuleList* l, const std::string& stem, const std::s
         working = rule->GetOrderPrerequisites();
         while (!working.empty())
         {
-            std::string thisOne = dir + Eval::ExtractFirst(working, " ");
+            std::string thisOne = Eval::ExtractFirst(working, " ");
             thisOne = Eval::ReplaceStem(stem, thisOne);
             thisOne = GetFileTime(thisOne, preferredPath, theTime) + thisOne;
             if (!orderPrereq.empty())
@@ -451,7 +461,7 @@ void Maker::EnterSpecificRule(RuleList* l, const std::string& stem, const std::s
             orderPrereq += thisOne;
         }
     }
-    Rule* rule = new Rule(target, prereq, orderPrereq, commands, "<implicitbuild>", 1);
+    std::shared_ptr<Rule> rule = std::make_shared<Rule>(target, prereq, orderPrereq, commands, "<implicitbuild>", 1);
     ruleList->InsertFirst(rule);
     if (!outerMost)
     {
@@ -459,22 +469,22 @@ void Maker::EnterSpecificRule(RuleList* l, const std::string& stem, const std::s
         p.Parse();
     }
 }
-void Maker::EnterDefaultRule(const std::string& goal, RuleList* dflt)
+void Maker::EnterDefaultRule(const std::string& goal, std::shared_ptr<RuleList>& dflt)
 {
     if (!RuleContainer::Instance()->Lookup(goal))
     {
-        Command* commands = nullptr;
+        std::shared_ptr<Command> commands = nullptr;
         for (auto it = dflt->begin(); !commands && it != dflt->end(); ++it)
             commands = (*it)->GetCommands();
-        RuleList* ruleList = new RuleList(goal);
+        std::shared_ptr<RuleList> ruleList = std::make_shared<RuleList>(goal);
         *RuleContainer::Instance() += ruleList;
-        Rule* rule = new Rule(goal, "", "", commands, "<implicitbuild>", 1);
+        std::shared_ptr<Rule> rule = std::make_shared<Rule>(goal, "", "", commands, "<implicitbuild>", 1);
         ruleList->Add(rule);
     }
 }
 bool Maker::SearchImplicitRules(const std::string& goal, const std::string& preferredPath, bool outerMost, Time& timeval)
 {
-    std::list<RuleList*> matchedRules;
+    std::list<std::shared_ptr<RuleList>> matchedRules;
     size_t n = goal.find_last_of("/\\");
     std::string dir;
     std::string name;
@@ -496,7 +506,7 @@ bool Maker::SearchImplicitRules(const std::string& goal, const std::string& pref
             n = Eval::MatchesPattern(goal, (*it)->GetTarget(), start);
             if (n == goal.size())
             {
-                matchedRules.push_back((*it).get());
+                matchedRules.push_back((*it));
                 if ((*it)->GetTarget() != "%")
                     nonMatchAnything = true;
             }
@@ -507,9 +517,31 @@ bool Maker::SearchImplicitRules(const std::string& goal, const std::string& pref
             n = Eval::MatchesPattern(name, (*it)->GetTarget(), start);
             if (n == name.size())
             {
-                matchedRules.push_back((*it).get());
+                matchedRules.push_back((*it));
                 if ((*it)->GetTarget() != "%")
                     nonMatchAnything = true;
+            }
+        }
+    }
+    bool nobuiltin = false;
+    for (auto&& rl : matchedRules)
+        for (auto&& r : *rl)
+        {
+            nobuiltin |= !r->GetBuiltin();
+        }
+    if (nobuiltin)
+    {
+        for (auto it = matchedRules.begin(); it != matchedRules.end();)
+        {
+            auto it1 = it;
+            ++it;
+            for (auto&& r : **it1)
+            {
+                if (r->GetBuiltin())
+                {
+                    matchedRules.erase(it1);
+                    break;
+                }
             }
         }
     }
@@ -534,8 +566,8 @@ bool Maker::SearchImplicitRules(const std::string& goal, const std::string& pref
     for (auto rule : matchedRules)
     {
 
-        std::string stem = Eval::FindStem(name, rule->GetTarget());
-        if (ExistsOrMentioned(stem, rule, preferredPath, dir, false, outerMost))
+        std::string stem = Eval::FindStem(goal, rule->GetTarget());
+        if (ExistsOrMentioned(stem, rule, preferredPath, false, outerMost))
             return true;
     }
     // no matches so far, dig into indirections...
@@ -547,13 +579,13 @@ bool Maker::SearchImplicitRules(const std::string& goal, const std::string& pref
             if (rule->GetTarget() != "%" || (n = name.find_last_of(".")) == std::string::npos || n == name.size() - 1 ||
                 name[n + 1] == '/' || name[n + 1] == '\\')
             {
-                std::string stem = Eval::FindStem(name, rule->GetTarget());
-                if (ExistsOrMentioned(stem, rule, preferredPath, dir, true, outerMost))
+                std::string stem = Eval::FindStem(goal, rule->GetTarget());
+                if (ExistsOrMentioned(stem, rule, preferredPath, true, outerMost))
                     return true;
             }
         }
     }
-    RuleList* dflt = RuleContainer::Instance()->Lookup(".DEFAULT");
+    std::shared_ptr<RuleList> dflt = RuleContainer::Instance()->Lookup(".DEFAULT");
     if (dflt)
     {
         // have a default, enter it
@@ -564,7 +596,7 @@ bool Maker::SearchImplicitRules(const std::string& goal, const std::string& pref
 }
 void Maker::EnterSuffixTerminals()
 {
-    RuleList* rl = RuleContainer::Instance()->Lookup(".SUFFIXES");
+    std::shared_ptr<RuleList> rl = RuleContainer::Instance()->Lookup(".SUFFIXES");
     if (rl)
     {
         for (auto& rule : *rl)
@@ -573,11 +605,12 @@ void Maker::EnterSuffixTerminals()
             while (!value.empty())
             {
                 std::string target = "%" + Eval::ExtractFirst(value, " ");
-                RuleList* ruleList = RuleContainer::Instance()->Lookup(target);
+                std::shared_ptr<RuleList> ruleList = RuleContainer::Instance()->Lookup(target);
                 if (!ruleList)
                 {
-                    ruleList = new RuleList(target);
-                    Rule* rule = new Rule(target, "", "", nullptr, "<implicitbuild>", 1);
+                    ruleList = std::make_shared<RuleList>(target);
+                    std::shared_ptr<Rule> rule = std::make_shared<Rule>(target, "", "", nullptr, "<implicitbuild>", 1);
+                    rule->SetBuiltin(true);
                     ruleList->Add(rule);
                     *RuleContainer::Instance() += ruleList;
                 }
@@ -588,7 +621,7 @@ void Maker::EnterSuffixTerminals()
 void Maker::GetEnvironment(EnvironmentStrings& env)
 {
     bool exportAll = false;
-    RuleList* rl = RuleContainer::Instance()->Lookup(".EXPORT_ALL_VARIABLES");
+    std::shared_ptr<RuleList> rl = RuleContainer::Instance()->Lookup(".EXPORT_ALL_VARIABLES");
     if (rl)
         exportAll = true;
     for (auto& var : *VariableContainer::Instance())
@@ -601,7 +634,7 @@ void Maker::GetEnvironment(EnvironmentStrings& env)
     }
 }
 void Maker::CallRunner(Runner&& runner, Depends* depend, EnvironmentStrings* env, bool keepGoing, std::promise<int> promise) {
-    std::list<RuleList*> list;
+    std::list<std::shared_ptr<RuleList>> list;
     promise.set_value(runner.RunOne(&list, depend, env, keepGoing));
 }
 int Maker::RunCommands(bool keepGoing)

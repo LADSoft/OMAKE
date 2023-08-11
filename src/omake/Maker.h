@@ -45,6 +45,7 @@ class Maker
     static void ClearFirstGoal() { firstGoal = ""; }
     void AddGoal(const std::string& name) { goals.push_back(name); }
     void Clear();
+    int GoalCount() { return goals.size() + (firstGoal.size() != 0); }
     bool HasCommands() { return depends.size() != 0; }
     bool CreateDependencyTree();
     int RunCommands(bool keepGoing = false);
@@ -54,13 +55,13 @@ class Maker
   protected:
     static void CallRunner(Runner&& runner, Depends* depend, EnvironmentStrings* env, bool keepGoing, std::promise<int> promise);
     std::unique_ptr<Depends> Dependencies(const std::string& goal, const std::string& preferredPath, Time& timeval, bool err,
-                                          std::string file, int line);
-    bool ExistsOrMentioned(const std::string& stem, RuleList* ruleList, const std::string& preferredPath, const std::string& dir,
+                                          bool top, std::string file, int line);
+    bool ExistsOrMentioned(const std::string& stem, std::shared_ptr<RuleList>& ruleList, const std::string& preferredPath,
                            bool implicit, bool outerMost);
     bool SearchImplicitRules(const std::string& goal, const std::string& preferredPath, bool outerMost, Time& timeval);
-    void EnterSpecificRule(RuleList* l, const std::string& stem, const std::string& preferredPath, const std::string& dir,
+    void EnterSpecificRule(std::shared_ptr<RuleList>& l, const std::string& stem, const std::string& preferredPath,
                            bool outerMost);
-    void EnterDefaultRule(const std::string& goal, RuleList* dflt);
+    void EnterDefaultRule(const std::string& goal, std::shared_ptr<RuleList>& dflt);
     std::string GetFileTime(const std::string& goal, const std::string& preferredPath, Time& timeval);
     bool OnList(const std::string& goal, char* what);
     bool NoList(char* what);

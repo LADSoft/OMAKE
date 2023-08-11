@@ -51,9 +51,9 @@ DEBUGFLAG := /g
 endif
 
 ifeq "$(VIAASSEMBLY)" ""
-CCFLAGS = /c /E- /! $(DEBUGFLAG)
+CCFLAGS = /c /E- /! $(DEBUGFLAG) -DTARGET_OS_WINDOWS
 else
-CCFLAGS = /S /E- /!
+CCFLAGS = /S /E- /! -DTARGET_OS_WINDOWS
 endif
 
 LINK=$(COMPILER_PATH)\bin\olink

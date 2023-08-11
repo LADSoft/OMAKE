@@ -29,6 +29,9 @@
 #include "Rule.h"
 #include "Maker.h"
 #include <string>
+
+class CmdFiles;
+
 class MakeMain
 {
   public:
@@ -46,7 +49,7 @@ class MakeMain
         }
     }
 
-    static CmdSwitchParser switchParser;
+    static CmdSwitchParser SwitchParser;
     static CmdSwitchCombineString specifiedFiles;
     static CmdSwitchBool displayOnly;
     static CmdSwitchBool touch;
@@ -61,7 +64,6 @@ class MakeMain
     static CmdSwitchBool debug;
     static CmdSwitchBool environOverride;
     static CmdSwitchBool help;
-    static CmdSwitchBool help2;
     static CmdSwitchCombineString includes;
     static CmdSwitchCombineString oldFiles;
     static CmdSwitchBool showDatabase;
@@ -76,9 +78,11 @@ class MakeMain
     static CmdSwitchInt jobs;
     static CmdSwitchCombineString jobOutputMode;
     static CmdSwitchString jobServer;
+    static const char* helpText;
     static const char* usageText;
     static const char* builtinVars;
     static const char* builtinRules;
+
 
   protected:
     void Dispatch(const char* data);
@@ -93,7 +97,7 @@ class MakeMain
     void ShowRule(RuleList* ruleList);
     void ShowDatabase();
     void SetTreePath(std::string& files);
-    void LoadEquates(int& argc, char** argv);
+    void LoadEquates(CmdFiles& files);
     void RunEquates();
 
   private:
