@@ -1,25 +1,26 @@
 /* Software License Agreement
- * 
- *     Copyright(C) 1994-2023 David Lindauer, (LADSoft)
- * 
+ *
+ *     Copyright(C) 1994-2026 David Lindauer, (LADSoft)
+ *
  *     This file is part of the Orange C Compiler package.
- * 
+ *
  *     The Orange C Compiler package is free software: you can redistribute it and/or modify
  *     it under the terms of the GNU General Public License as published by
  *     the Free Software Foundation, either version 3 of the License, or
  *     (at your option) any later version.
- * 
+ *
  *     The Orange C Compiler package is distributed in the hope that it will be useful,
  *     but WITHOUT ANY WARRANTY; without even the implied warranty of
  *     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *     GNU General Public License for more details.
- * 
+ *
  *     You should have received a copy of the GNU General Public License
  *     along with Orange C.  If not, see <http://www.gnu.org/licenses/>.
- * 
+ *
  *     contact information:
  *         email: TouchStone222@runbox.com <David Lindauer>
- * 
+ *
+ *
  */
 
 #ifndef SPAWNER_H
@@ -29,7 +30,6 @@
 #include <list>
 #include <atomic>
 #include <future>
-#include "JobServerAwareThread.h"
 #include <vector>
 #include "os.h"
 #ifdef TARGET_OS_WINDOWS
@@ -60,11 +60,16 @@ class Command
     iterator end() { return commands.end(); }
     std::string GetFile() const { return file; }
     int GetLine() const { return lineno; }
+    bool AlreadyRun() { return grouped && alreadyRun.test_and_set(std::memory_order_acquire); }
+    void SetGrouped() { grouped = true; }
+    bool GetGrouped() const { return grouped; }
 
   private:
     std::list<std::string> commands;
     std::string file;
     int lineno;
+    std::atomic_flag alreadyRun = ATOMIC_FLAG_INIT;
+    bool grouped = false;
 };
 class RuleList;
 class Rule;
@@ -91,22 +96,20 @@ class Spawner
     }
     ~Spawner() {}
     int InternalRun();
-    void Run(std::shared_ptr<Command>& Commands, OutputType Type, std::shared_ptr<RuleList> RuleList = nullptr, std::shared_ptr<Rule> Rule = nullptr);
+    void Run(std::shared_ptr<Command>& Commands, OutputType Type, std::shared_ptr<RuleList> RuleList = nullptr,
+             std::shared_ptr<Rule> Rule = nullptr);
     static void Stop() { stopAll = true; }
     std::string shell(const std::string& command);
     void SetLineLength(size_t length) { lineLength = length; }
     size_t GetLineLength() const { return lineLength; }
 
-    int RetVal()
-    {
-        return retVal;
-    }
+    int RetVal() { return retVal; }
 
     static const char escapeStart;
     static const char escapeEnd;
 
   protected:
-    int Run(const std::string& cmd, bool ignoreErrors, bool silent, bool dontrun, bool make = false);
+    int Run(const std::string& cmd, bool ignoreErrors, bool silent, bool dontrun);
     bool split(const std::string& cmd);
     std::string QualifyFiles(const std::string& cmd);
     void RetVal(int val) { retVal = val; }

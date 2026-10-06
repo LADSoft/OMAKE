@@ -1,25 +1,26 @@
 /* Software License Agreement
- * 
- *     Copyright(C) 1994-2023 David Lindauer, (LADSoft)
- * 
+ *
+ *     Copyright(C) 1994-2026 David Lindauer, (LADSoft)
+ *
  *     This file is part of the Orange C Compiler package.
- * 
+ *
  *     The Orange C Compiler package is free software: you can redistribute it and/or modify
  *     it under the terms of the GNU General Public License as published by
  *     the Free Software Foundation, either version 3 of the License, or
  *     (at your option) any later version.
- * 
+ *
  *     The Orange C Compiler package is distributed in the hope that it will be useful,
  *     but WITHOUT ANY WARRANTY; without even the implied warranty of
  *     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *     GNU General Public License for more details.
- * 
+ *
  *     You should have received a copy of the GNU General Public License
  *     along with Orange C.  If not, see <http://www.gnu.org/licenses/>.
- * 
+ *
  *     contact information:
  *         email: TouchStone222@runbox.com <David Lindauer>
- * 
+ *
+ *
  */
 
 #define _CRT_SECURE_NO_WARNINGS
@@ -41,6 +42,8 @@
 #include <cstdio>
 #include <algorithm>
 #include <sstream>
+#include <filesystem>
+#include "BasicLogging.h"
 
 CmdSwitchParser MakeMain::SwitchParser;
 CmdSwitchCombineString MakeMain::specifiedFiles(SwitchParser, 'f', ' ', {"file"});
@@ -70,59 +73,78 @@ CmdSwitchBool MakeMain::keepResponseFiles(SwitchParser, 'K');
 CmdSwitchInt MakeMain::jobs(SwitchParser, 'j', INT_MAX, 1, INT_MAX);
 CmdSwitchString MakeMain::jobServer(SwitchParser, 0, 0, {"jobserver-auth"});
 CmdSwitchCombineString MakeMain::jobOutputMode(SwitchParser, 'O');
+CmdSwitchString MakeMain::verbose2(SwitchParser, 'y', 'y', {"verbose"});
 
 const char* MakeMain::helpText =
-    "[options] goals\n"
-    "\n"
-    "/B    Rebuild all             /C    Set directory\n"
-    "/Dxxx Define something        /Ixxx Set include path\n"
-    "/K    Keep response files     /O    Set output mode\n"
-    "/R    Ignore builtin vars     /S    Cancel keepgoing\n"
-    "/T    Tree Build              /V    Show version and date\n"
-    "/Wxxx WhatIf                  /d    Reserved\n"
-    "/e    Environment overrides   /fxxx Specify make file\n"
-    "/h    This text               /i    Ignore errors\n"
-    "/j:xx Set number of jobs      /k    Keep going\n"
-    "/n    Display only            /oxxx Specify old goals\n"
-    "/p    Print database          /q    Query\n"
-    "/r    Ignore builtin rules    /s    Don't print commands\n"
-    "/t    Touch                   /u    Debug warnings\n"
-    "/w    Print make status       --eval=STRING evaluate a statement\n"
-    "/!    No logo                 /? or --help  this help\n"
-    "--jobserver-auth=xxxx               Name a jobserver to use for getting jobs\n"
-    "--version                           Show version info\n"
-    "--no-builtin-rules                  Ignore builtin rules\n" 
-    "--no-builtin-vars                   Ignore builtin variables\n" 
-    "\nTime: " __TIME__ "  Date: " __DATE__;
+    R"help([options] goals\n"
+
+This program is a make utility simiar to gnu make.
+It runs scripts which define how to create some type of output
+usually an executable program image or data for it.
+
+/B    Rebuild all             /C    Set directory
+/Dxxx Define something        /Ixxx Set include path
+/K    Keep response files     /O    Set output mode
+/R    Ignore builtin vars     /S    Cancel keepgoing
+/T    Tree Build              /V    Show version and date
+/Wxxx WhatIf                  /d    Reserved
+/e    Environment overrides   /fxxx Specify make file
+/h    This text               /i    Ignore errors
+/j:xx Set number of jobs      /k    Keep going
+/n    Display only            /oxxx Specify old goals
+/p    Print database          /q    Query
+/r    Ignore builtin rules    /s    Don't print commands
+/t    Touch                   /u    Debug warnings
+/w    Print make status       --eval=STRING evaluate a statement
+/!    No logo                 /? or --help  this help
+/v    Verbose
+--jobserver-auth=xxxx               Name a jobserver to use for getting jobs
+--version                           Show version info
+--no-builtin-rules                  Ignore builtin rules
+--no-builtin-vars                   Ignore builtin variables
+--verbose                           Verbose
+)help"
+    "Time: " __TIME__ "  Date: " __DATE__;
+
 const char* MakeMain::usageText = "[options] goals\n";
+#ifdef _WIN32
+// Default variables for OrangeC on windows
+const char* MakeMain::builtinVars =
+    "CC=${ORANGEC}/bin/occ\n"
+    "CXX=${ORANGEC}/bin/occ\n"
+    "AS=${ORANGEC}/bin/oasm\n";
+#else
+// Default variables on UNIX, these are system wide default symlinks, use em.
+const char* MakeMain::builtinVars =
+    "CC=cc\n"
+    "CXX=c++\n"
+    "AS=as\n"
+    "YACC=yacc\n"
+    "LEX=lex\n";
 
-const char* MakeMain::builtinVars = 
-"CC=${ORANGEC}/bin/occ\n"
-"CXX=${ORANGEC}/bin/occ\n"
-"AS=${ORANGEC}/bin/oasm\n";
-
+#endif
 const char* MakeMain::builtinRules =
-"%.o: %.c .__BUILTIN\n"
-"\t${CC} ${CPPFLAGS} ${CFLAGS} -o $@ -c $<\n"
-"%.o: %.cc .__BUILTIN\n"
-"\t${CXX} ${CPPFLAGS} ${CXXFLAGS} -o $@ -c $<\n"
-"%.o: %.cpp .__BUILTIN\n"
-"\t${CXX} ${CPPFLAGS} ${CXXFLAGS} -o $@ -c $<\n"
-"%.o: %.s .__BUILTIN\n"
-"\t${AS} ${ASFLAGS} -o $@ $<\n"
-"%.exe: %.o .__BUILTIN\n"
-"\t${CC} -o $@ ${LDFLAGS} $^ ${LOADLIBES} ${LDLIBS}\n"
-"%.c: %.y .__BUILTIN\n"
-"\t${YACC} ${YFLAGS} $<\n";
-
+    "%.o: %.c .__BUILTIN\n"
+    "\t${CC} ${CPPFLAGS} ${CFLAGS} -o $@ -c $<\n"
+    "%.o: %.cc .__BUILTIN\n"
+    "\t${CXX} ${CPPFLAGS} ${CXXFLAGS} -o $@ -c $<\n"
+    "%.o: %.cpp .__BUILTIN\n"
+    "\t${CXX} ${CPPFLAGS} ${CXXFLAGS} -o $@ -c $<\n"
+    "%.o: %.s .__BUILTIN\n"
+    "\t${AS} ${ASFLAGS} -o $@ $<\n"
+    "%.exe: %.o .__BUILTIN\n"
+    "\t${CC} -o $@ ${LDFLAGS} $^ ${LOADLIBES} ${LDLIBS}\n"
+    "%.c: %.y .__BUILTIN\n"
+    "\t${YACC} ${YFLAGS} $<\n";
 
 int MakeMain::makeLevel;
 
-int main(int argc, char** argv)
+int main(int argc, char** argv) MAINTRY
 {
     MakeMain Main;
     return Main.Run(argc, argv);
 }
+MAINCATCH
 
 void MakeMain::Dispatch(const char* data)
 {
@@ -143,7 +165,6 @@ void MakeMain::Dispatch(const char* data)
     }
     argvx[argcx] = 0;
     SwitchParser.Parse(&argcx, argvx.get());
-    argvx.release();
 }
 const char* MakeMain::GetStr(const char* data)
 {
@@ -241,9 +262,25 @@ void MakeMain::SetMakeFlags()
     {
         vals += "u";
     }
-    // not setting -T so we don't make it recursive
+
+    // if (verbose.GetValue())
+    //{
+    //     vals += "v";
+    // }
+    //  not setting -T so we don't make it recursive
     if (vals == "-")
         vals = "";
+    if (verbose2.GetExists())
+    {
+        vals += std::string(" -y");
+        const auto& value = verbose2.GetValue();
+        for (int i = 0; i < value.length(); i++)
+        {
+            vals += "y";
+        }
+        OrangeC::Utils::BasicLogger::extremedebug("Verbosity intended: ",
+                                                  std::to_string(verbose2.GetExists() + verbose2.GetValue().length()));
+    }
     if (jobs.GetExists())
     {
         int n = jobs.GetValue();
@@ -281,7 +318,6 @@ bool MakeMain::LoadJobArgs()
         jobCount = jobs.GetValue();
         if (jobCount == 0)
             return false;
-        
     }
     else
     {
@@ -305,11 +341,18 @@ bool MakeMain::LoadJobArgs()
 }
 void MakeMain::LoadEnvironment()
 {
-#ifdef TARGET_OS_WINDOWS
-    char** env = environ;
-#else
-    char** env = 0;
+// https://www.man7.org/linux/man-pages/man7/environ.7.html
+/*
+ *Historically and by standard, environ must be declared in the
+ *user program.  However, as a (nonstandard) programmer
+ *convenience, environ is declared in the header file <unistd.h> if
+ *the _GNU_SOURCE feature test macro is defined (see
+ *feature_test_macros(7)).
+ */
+#ifndef TARGET_OS_WINDOWS
+    extern char** environ;
 #endif
+    char** env = environ;
     Variable::Origin origin;
     if (environOverride.GetValue())
         origin = Variable::o_environ_override;
@@ -355,6 +398,7 @@ void MakeMain::SetupImplicit()
 }
 void MakeMain::ShowRule(RuleList* ruleList)
 {
+    std::ios_base::fmtflags f(std::cout.flags());
     for (auto& rule : *ruleList)
     {
         std::cout << ruleList->GetTarget() << (ruleList->GetDoubleColon() ? "::" : ":") << std::endl;
@@ -362,8 +406,11 @@ void MakeMain::ShowRule(RuleList* ruleList)
         std::cout << "\t\t" << rule->GetPrerequisites() << std::endl;
         std::cout << "\tOrder Prerequisites:" << std::endl;
         std::cout << "\t\t" << rule->GetOrderPrerequisites() << std::endl;
-        std::cout << "\tCommands:" << std::endl;
         std::shared_ptr<Command> commands = rule->GetCommands();
+        const char* grouped = "";
+        if (commands != nullptr && commands->GetGrouped())
+            grouped = "Grouped";
+        std::cout << "\tCommands: " << grouped << std::endl;
         if (commands)
         {
             for (auto&& command : *commands)
@@ -382,7 +429,7 @@ void MakeMain::ShowRule(RuleList* ruleList)
             std::cout << " := ";
         std::cout << it->second->GetValue() << std::endl;
     }
-    std::cout.clear();
+    std::cout.flags(f);
 }
 void MakeMain::ShowDatabase()
 {
@@ -436,7 +483,7 @@ void MakeMain::SetTreePath(std::string& files)
         } while (!found && pos != std::string::npos);
         if (!path.empty())
         {
-            files = path;
+            files = std::move(path);
             SetVariable("_TREEROOT", files, Variable::o_command_line, false);
             SetVariable("_TREETARGET", OS::GetWorkingDir(), Variable::o_command_line, false);
         }
@@ -447,12 +494,11 @@ void MakeMain::LoadEquates(CmdFiles& files)
     std::deque<std::string> toRemove;
     for (auto&& name : files)
     {
-        if (name[0] != '-' && name[0] != '/' && name.find_first_of('=') != std::string::npos)
+        if (name.Name[0] != '-' && name.Name[0] != '/' && name.Name.find_first_of('=') != std::string::npos)
         {
-            equates.push_back(name);
-            toRemove.push_back(name);
+            equates.push_back(name.Name);
+            toRemove.push_back(name.Name);
         }
-
     }
     for (auto&& name : toRemove)
     {
@@ -489,6 +535,18 @@ int MakeMain::Run(int argc, char** argv)
     }
     auto files =
         ToolChain::StandardToolStartup(SwitchParser, argc, argv, usageText, helpText, [this]() { return !help.GetValue(); });
+    LoadEnvironment();
+    OrangeC::Utils::BasicLogger::SetVerbosity((int)verbose2.GetExists() + verbose2.GetValue().length());
+    auto* var = VariableContainer::Instance()->Lookup("MAKE_LEVEL");
+    if (!var)
+    {
+        OrangeC::Utils::BasicLogger::SetPrologue(std::string("[OMAKE(") + std::to_string(OS::GetProcessId()) + ",0)]");
+    }
+    else
+    {
+        OrangeC::Utils::BasicLogger::SetPrologue(std::string("[OMAKE(") + std::to_string(OS::GetProcessId()) + "," +
+                                                 var->GetValue() + ")]");
+    }
     LoadEquates(files);
     char* cpath = getenv("CPATH");
     if (cpath)
@@ -506,18 +564,17 @@ int MakeMain::Run(int argc, char** argv)
             return 2;
         }
     }
-
     if (cancelKeep.GetValue())
     {
         cancelKeep.SetValue(false);
         keepGoing.SetValue(false);
     }
-
     if (!LoadJobArgs())
         ToolChain::Usage(helpText);
 
     bool done = false;
     Eval::SetWarnings(warnUndef.GetValue());
+    std::string proper_make = OS::SelfPath();
     while (!done && !Eval::GetErrCount())
     {
         VariableContainer::Instance()->Clear();
@@ -527,22 +584,16 @@ int MakeMain::Run(int argc, char** argv)
         LoadEnvironment();
         LoadCmdDefines();
         RunEquates();
-        OS::InitJobServer(); 
-        SetVariable("MAKE", files[0].c_str(), Variable::o_environ, false);
+        OS::InitJobServer();
+        SetVariable("MAKE", proper_make.c_str(), Variable::o_environ, false);
         Variable* v = VariableContainer::Instance()->Lookup("SHELL");
-        if (!v)
+        if (!OS::IsUnixLikeShell(OS::LookupShellNames()))
         {
-            v = VariableContainer::Instance()->Lookup("MSYSCON");  // detect MSYS version of comspec
-            if (!v)
-                v = VariableContainer::Instance()->Lookup("COMSPEC");
-            if (!v)
-                v = VariableContainer::Instance()->Lookup("ComSpec");
-            if (v)
-            {
-                std::string val = v->GetValue();
-                SetVariable("SHELL", val, Variable::o_environ, false);
-                SetVariable(".SHELLFLAGS", "-c", Variable::o_environ, false);
-            }
+            SetVariable(".SHELLFLAGS", "/c", Variable::o_environ, false);
+        }
+        else
+        {
+            SetVariable(".SHELLFLAGS", "-c", Variable::o_environ, false);
         }
 
         std::string wd = OS::GetWorkingDir();
@@ -553,7 +604,7 @@ int MakeMain::Run(int argc, char** argv)
         {
             if (!goals.empty())
                 goals += " ";
-            goals += files[i];
+            goals += files[i].Name;
         }
         SetVariable("MAKECMDGOALS", goals, Variable::o_command_line, false);
         SetMakeFlags();
@@ -589,7 +640,8 @@ int MakeMain::Run(int argc, char** argv)
             v->SetExport(true);
             Include::Instance()->AddFileList(v->GetValue(), true, true);
         }
-        std::shared_ptr<Rule> rule = std::make_shared<Rule>(".SUFFIXES", ".c .o .cpp .nas .asm .s", "", std::make_shared<Command>("", 0), "", 0, false);
+        std::shared_ptr<Rule> rule =
+            std::make_shared<Rule>(".SUFFIXES", ".c .o .cpp .nas .asm .s", "", std::make_shared<Command>("", 0), "", 0, false);
         std::shared_ptr<RuleList> ruleList = std::make_shared<RuleList>(".SUFFIXES");
         ruleList->Add(rule, false);
         *RuleContainer::Instance() += ruleList;
@@ -599,7 +651,7 @@ int MakeMain::Run(int argc, char** argv)
             if (treeBuild.GetValue())
                 files = "treetop.mak";
             else
-                files = "makefile";
+                files = "Makefile";
         }
         if (treeBuild.GetValue())
             SetTreePath(files);
@@ -622,7 +674,7 @@ int MakeMain::Run(int argc, char** argv)
         for (auto& rule : *rl)
         {
             std::string v = rule->GetPrerequisites();
-            Eval r(v, false);
+            Eval r(std::move(v), false);
             std::string cmdLine = r.Evaluate();
             Dispatch(cmdLine.c_str());
         }
@@ -682,7 +734,7 @@ int MakeMain::Run(int argc, char** argv)
         {
             for (int i = 1; i < files.size(); i++)
             {
-                maker.AddGoal(files[i]);
+                maker.AddGoal(files[i].Name);
             }
         }
         if (maker.CreateDependencyTree())

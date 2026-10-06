@@ -1,29 +1,30 @@
 /* Software License Agreement
- * 
- *     Copyright(C) 1994-2023 David Lindauer, (LADSoft)
- * 
+ *
+ *     Copyright(C) 1994-2026 David Lindauer, (LADSoft)
+ *
  *     This file is part of the Orange C Compiler package.
- * 
+ *
  *     The Orange C Compiler package is free software: you can redistribute it and/or modify
  *     it under the terms of the GNU General Public License as published by
  *     the Free Software Foundation, either version 3 of the License, or
  *     (at your option) any later version.
- * 
+ *
  *     The Orange C Compiler package is distributed in the hope that it will be useful,
  *     but WITHOUT ANY WARRANTY; without even the implied warranty of
  *     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *     GNU General Public License for more details.
- * 
+ *
  *     You should have received a copy of the GNU General Public License
  *     along with Orange C.  If not, see <http://www.gnu.org/licenses/>.
- * 
+ *
  *     contact information:
  *         email: TouchStone222@runbox.com <David Lindauer>
- * 
+ *
+ *
  */
 
 #ifndef _CRT_SECURE_NO_WARNINGS
-#define _CRT_SECURE_NO_WARNINGS
+#    define _CRT_SECURE_NO_WARNINGS
 #endif
 #include <cstdio>
 #include <fstream>
@@ -93,17 +94,18 @@ void ToolChain::Usage(const char* text, int exitVal)
             left = rows - 1;
         }
     }
-    exit(1);
+    exit(exitVal);
 }
 CmdFiles ToolChain::StandardToolStartup(CmdSwitchParser& SwitchParser, int argc, char** argv, const char* usageText,
-                                        const char* helpText, std::function<bool()> noBanner)
+                                        const char* helpText, std::function<bool()> noBanner, int exitVal,
+                                        std::function<void()> helpCleanup)
 {
     CmdSwitchBool NoLogo(SwitchParser, '!', false, {"nologo"});
     CmdSwitchBool ShowVersion(SwitchParser, 'v', false, {"version"});
     CmdSwitchBool ShowHelp(SwitchParser, '?', false, {"help"});
     CmdSwitchFile File(SwitchParser, '@');
     CmdSwitchFile internalConfig(SwitchParser);
-
+    CmdFiles rv;
     Utils::SetEnvironmentToPathParent("ORANGEC");
     std::string configName = Utils::QualifiedFile(argv[0], ".cfg");
     if (access(configName.c_str(), 0) != 0)
@@ -117,11 +119,11 @@ CmdFiles ToolChain::StandardToolStartup(CmdSwitchParser& SwitchParser, int argc,
         if (!internalConfig.Parse(configName.c_str()))
             Utils::Fatal("Corrupt configuration file");
     }
-    if (!SwitchParser.Parse(&argc, argv) && !ShowHelp.GetExists())
+    if (!SwitchParser.Parse(&argc, argv, &rv) && !ShowHelp.GetExists())
     {
         if (!noBanner || !noBanner())
             ToolChain::ShowBanner();
-        ToolChain::Usage(usageText);
+        ToolChain::Usage(usageText, exitVal);
     }
     if (noBanner && noBanner())
         NoLogo.SetValue(true);
@@ -130,8 +132,11 @@ CmdFiles ToolChain::StandardToolStartup(CmdSwitchParser& SwitchParser, int argc,
     if (ShowVersion.GetValue())
         ToolChain::ShowVersion();
     if (ShowHelp.GetExists())
-        ToolChain::Usage(helpText);
-    auto rv = CmdFiles(argv);
+    {
+        if (helpCleanup)
+            helpCleanup();
+        ToolChain::Usage(helpText, 0);
+    }
     rv.Add(File);
     return rv;
 }

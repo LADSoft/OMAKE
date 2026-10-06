@@ -1,25 +1,26 @@
 /* Software License Agreement
- * 
- *     Copyright(C) 1994-2023 David Lindauer, (LADSoft)
- * 
+ *
+ *     Copyright(C) 1994-2026 David Lindauer, (LADSoft)
+ *
  *     This file is part of the Orange C Compiler package.
- * 
+ *
  *     The Orange C Compiler package is free software: you can redistribute it and/or modify
  *     it under the terms of the GNU General Public License as published by
  *     the Free Software Foundation, either version 3 of the License, or
  *     (at your option) any later version.
- * 
+ *
  *     The Orange C Compiler package is distributed in the hope that it will be useful,
  *     but WITHOUT ANY WARRANTY; without even the implied warranty of
  *     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *     GNU General Public License for more details.
- * 
+ *
  *     You should have received a copy of the GNU General Public License
  *     along with Orange C.  If not, see <http://www.gnu.org/licenses/>.
- * 
+ *
  *     contact information:
  *         email: TouchStone222@runbox.com <David Lindauer>
- * 
+ *
+ *
  */
 
 #include "MakeMain.h"
@@ -32,7 +33,9 @@
 #include <list>
 #include <cstdlib>
 #include <iostream>
-
+#include <thread>
+#include <chrono>
+#include "BasicLogging.h"
 void Runner::DeleteOne(Depends* depend)
 {
     for (auto& d : *depend)
@@ -42,10 +45,40 @@ void Runner::DeleteOne(Depends* depend)
     if (depend->ShouldDelete())
         OS::RemoveFile(depend->GetGoal());
 }
-void Runner::CallRunner(Runner* runner, std::list<std::shared_ptr<RuleList>>* list, Depends* depend, EnvironmentStrings* env, bool keepGoing, std::promise<int> promise) {
+void Runner::CallRunner(Runner* runner, std::list<std::shared_ptr<RuleList>>* list, Depends* depend, EnvironmentStrings* env,
+                        bool keepGoing, std::promise<int> promise)
+{
     auto retval = runner->RunOne(list, depend, env, keepGoing);
     promise.set_value(retval);
+    OrangeC::Utils::BasicLogger::debug("CallRunner returning from a runner: ", depend->GetGoal());
 }
+struct future_holding_struct
+{
+    std::string command;
+    std::future<int> return_value;
+    future_holding_struct(const std::string& command, std::future<int>&& return_value) :
+        command(command), return_value(std::future(std::move(return_value)))
+    {
+    }
+    int get() { return return_value.get(); }
+    bool valid() { return return_value.valid(); }
+    template <class Rep, class Period>
+    std::future_status wait_for(const std::chrono::duration<Rep, Period>& timeout_duration) const
+    {
+        return return_value.wait_for(timeout_duration);
+    }
+    future_holding_struct(future_holding_struct&& other) noexcept
+    {
+        this->command = std::move(other.command);
+        this->return_value = std::move(other.return_value);
+    }
+    future_holding_struct& operator=(future_holding_struct&& holder) noexcept
+    {
+        this->command.swap(holder.command);
+        this->return_value = std::move(holder.return_value);
+        return *this;
+    }
+};
 int Runner::RunOne(std::list<std::shared_ptr<RuleList>>* ruleStack_in, Depends* depend, EnvironmentStrings* env, bool keepGoing)
 {
     std::shared_ptr<RuleList> rl = depend->GetRuleList();
@@ -57,19 +90,22 @@ int Runner::RunOne(std::list<std::shared_ptr<RuleList>>* ruleStack_in, Depends* 
     rl->SetBuilt();
     auto ruleStack(*ruleStack_in);
     ruleStack.push_back(rl);
-    std::list<std::future<int>> workingList;
-    std::list<std::thread> workingThreads;
+    std::vector<future_holding_struct> workingList;
     int rv = 0;
     bool stop = false;
     for (auto& i : *depend)
     {
         std::promise<int> promise;
-        workingList.push_back(promise.get_future());
-        auto thrd = std::thread(CallRunner, this, &ruleStack, i.get(), env, keepGoing, std::move(promise));
-        workingThreads.push_back(std::move(thrd));
-        if (MakeMain::jobs.GetValue() == 1)
+        workingList.push_back(future_holding_struct(depend->GetGoal(), promise.get_future()));
+        OrangeC::Utils::BasicLogger::debug("RunOne CallRunner Creating a runner: ", i->GetGoal());
+
+        std::thread(CallRunner, this, &ruleStack, i.get(), env, keepGoing, std::move(promise)).detach();
+        using namespace std::chrono_literals;
+        std::this_thread::sleep_for(20ms);
+        if (MakeMain::jobs.GetValue() == 1 || i->GetOrdered())
         {
             int rv1 = workingList.back().get();
+            workingList.pop_back();
             if (rv <= 0 && rv1 != 0)
                 rv = rv1;
             if (rv > 0)
@@ -84,27 +120,36 @@ int Runner::RunOne(std::list<std::shared_ptr<RuleList>>* ruleStack_in, Depends* 
             }
         }
     }
-    if (MakeMain::jobs.GetValue() != 1)
+    for (auto it = workingList.begin(); it != workingList.end(); it++)
     {
-        for (auto&& w : workingList)
+        OrangeC::Utils::BasicLogger::extremedebug("Waiting for a return value from futures in the list");
+        size_t distance = std::distance(it, workingList.end());
+        OrangeC::Utils::BasicLogger::extremedebug("Waiting on iterator at distance from end: ", std::to_string(distance),
+                                                  " for future get. Distance from start: ", std::distance(workingList.begin(), it));
+        auto& w = *it;
+        using namespace std::chrono_literals;
+        while (w.wait_for(1s) != std::future_status::ready)
         {
-            int rv1 = w.get();
-            if (rv <= 0 && rv1 != 0)
-                rv = rv1;
-            if (rv > 0)
+            OrangeC::Utils::BasicLogger::extremedebug("Waiting on the future for depends: ", w.command,
+                                                      " current jobs: ", OS::GetCurrentJobs());
+        }
+        int rv1 = w.get();
+        OrangeC::Utils::BasicLogger::extremedebug("Finished the future get on iterator: ", std::to_string(distance));
+
+        if (rv <= 0 && rv1 != 0)
+            rv = rv1;
+        if (rv > 0)
+        {
+            stop = true;
+            if (!keepGoing)
             {
-                stop = true;
-                if (!keepGoing)
-                {
-                    Spawner::Stop();
-                    OS::TerminateAll();
-                    break;
-                }
+                OrangeC::Utils::BasicLogger::extremedebug("Terminating all subprograms");
+                Spawner::Stop();
+                OS::TerminateAll();
+                break;
             }
         }
     }
-    for (auto&& w : workingThreads)
-        w.join();
     if (stop)
     {
         rl->Release();
@@ -133,7 +178,7 @@ int Runner::RunOne(std::list<std::shared_ptr<RuleList>>* ruleStack_in, Depends* 
         if (precious)
             depend->Precious();
     }
-    if (depend->GetRule() && depend->GetRule()->GetCommands())
+    if (depend->GetRule() && depend->GetRule()->GetCommands() && !depend->GetRule()->GetCommands()->AlreadyRun())
     {
         Eval::SetRuleStack(ruleStack);
         Spawner sp(*env, ig, sil, oneShell, posix, displayOnly && !make, keepResponseFiles);
@@ -149,13 +194,13 @@ int Runner::RunOne(std::list<std::shared_ptr<RuleList>>* ruleStack_in, Depends* 
                 OS::RemoveFile(depend->GetGoal());
                 std::cout << std::endl;
                 Eval::error("commands returned error code " + b + " '" + depend->GetGoal() + "' removed",
-                    depend->GetRule()->GetCommands()->GetFile(), depend->GetRule()->GetCommands()->GetLine());
+                            depend->GetRule()->GetCommands()->GetFile(), depend->GetRule()->GetCommands()->GetLine());
             }
             else
             {
                 std::cout << std::endl;
                 Eval::error("commands returned error code " + b, depend->GetRule()->GetCommands()->GetFile(),
-                    depend->GetRule()->GetCommands()->GetLine());
+                            depend->GetRule()->GetCommands()->GetLine());
             }
         }
     }

@@ -1,6 +1,6 @@
 # Software License Agreement
 # 
-#     Copyright(C) 1994-2022 David Lindauer, (LADSoft)
+#     Copyright(C) 1994-2025 David Lindauer, (LADSoft)
 # 
 #     This file is part of the Orange C Compiler package.
 # 
@@ -19,6 +19,7 @@
 # 
 #     contact information:
 #         email: TouchStone222@runbox.com <David Lindauer>
+# 
 # 
 
 ifeq "$(COMPILER)" "MS"
@@ -47,18 +48,25 @@ LLIB_DEPENDENCIES := $(notdir $(filter-out $(addsuffix .obj,$(EXCLUDE)) $(MAIN_D
 
 
 CC=cl.exe
-ifneq "$(MSPDB)" ""
-CCFLAGS =/Od /Zi /FS /EHs /c /nologo /MTd -DTARGET_OS_WINDOWS
+ifneq "$(SANITIZE)" ""
+CCFLAGS =/O2 /Zi /EHsc /c /nologo /MTd /std:c++17 /fsanitize=address /DSANITIZER
 else
-CCFLAGS = /O2 /EHs /c /nologo /MT -DTARGET_OS_WINDOWS
+ifneq "$(MSPDB)" ""
+CCFLAGS =/Od /Zi /FS /EHsc /c /nologo /MTd /std:c++17
+else
+CCFLAGS = /O2 /EHsc /c /nologo /MT /std:c++17
 endif
-
+endif
 LINK=link.exe
 
+ifneq "$(SANITIZE)" ""
+LFLAGS=/LTCG:off /nologo /NXCOMPAT /MACHINE:x86 /TLBID:1 /SAFESEH /DEBUG
+else
 ifneq "$(MSPDB)" ""
-LFLAGS=/LTCG:incremental /nologo /NXCOMPAT /MACHINE:x86 /TLBID:1 /DEBUG
+LFLAGS=/LTCG:off /nologo /NXCOMPAT /MACHINE:x86 /TLBID:1 /SAFESEH /DEBUG
 else
 LFLAGS=/LTCG:incremental /nologo /NXCOMPAT /DYNAMICBASE /MACHINE:x86 /OPT:REF /SAFESEH  /OPT:ICF /TLBID:1
+endif
 endif
 LIBEXE=lib.exe
 LIBFLAGS=/MACHINE:x86 /LTCG /nologo
@@ -75,12 +83,13 @@ RCFLAGS = ./r
 ifneq "$(INCLUDES)" ""
 CINCLUDES:=$(addprefix /I,$(INCLUDES))
 endif
+DEFINES := NDEBUG TARGET_OS_WINDOWS $(DEFINES)
 DEFINES := $(addprefix /D,$(DEFINES))
 DEFINES := $(subst @, ,$(DEFINES))
 LIB_DEPENDENCIES := $(foreach file,$(addsuffix $(LIB_EXT),$(LIB_DEPENDENCIES)), $(_LIBDIR)\$(file))
 
-CFLAGS := $(CCFLAGS) $(CINCLUDES) $(DEFINES) /DMICROSOFT /DWIN32
-CXXFLAGS := $(CCFLAGS) $(CINCLUDES) $(DEFINES) /DMICROSOFT /DWIN32
+CFLAGS := $(CCFLAGS) $(CINCLUDES) $(DEFINES)
+CXXFLAGS := $(CCFLAGS) $(CINCLUDES) $(DEFINES)
 
 ifeq "$(TARGET)" "GUI"
 LFLAGS:= $(LFLAGS) /SUBSYSTEM:WINDOWS
@@ -110,7 +119,7 @@ vpath %.res $(_OUTPUTDIR)
 	$(RC) -i$(RCINCLUDE) $(RCFLAGS) -fo$(_OUTPUTDIR)/$@ $^
 
 $(_LIBDIR)\$(NAME)$(LIB_EXT): $(LLIB_DEPENDENCIES)
-#	-del $()_LIBDIR)\$(NAME)$(LIB_EXT) 2> $(NULLDEV)
+#	-del $(_LIBDIR)\$(NAME)$(LIB_EXT) 2> $(NULLDEV)
 	$(LIBEXE) $(LIBFLAGS) /OUT:$(_LIBDIR)\$(NAME)$(LIB_EXT) $(addprefix $(_OUTPUTDIR)\,$(LLIB_DEPENDENCIES)) 
 
 

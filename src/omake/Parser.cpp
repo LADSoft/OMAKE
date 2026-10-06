@@ -1,25 +1,26 @@
 /* Software License Agreement
- * 
- *     Copyright(C) 1994-2023 David Lindauer, (LADSoft)
- * 
+ *
+ *     Copyright(C) 1994-2026 David Lindauer, (LADSoft)
+ *
  *     This file is part of the Orange C Compiler package.
- * 
+ *
  *     The Orange C Compiler package is free software: you can redistribute it and/or modify
  *     it under the terms of the GNU General Public License as published by
  *     the Free Software Foundation, either version 3 of the License, or
  *     (at your option) any later version.
- * 
+ *
  *     The Orange C Compiler package is distributed in the hope that it will be useful,
  *     but WITHOUT ANY WARRANTY; without even the implied warranty of
  *     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *     GNU General Public License for more details.
- * 
+ *
  *     You should have received a copy of the GNU General Public License
  *     along with Orange C.  If not, see <http://www.gnu.org/licenses/>.
- * 
+ *
  *     contact information:
  *         email: TouchStone222@runbox.com <David Lindauer>
- * 
+ *
+ *
  */
 
 #include "Parser.h"
@@ -34,6 +35,7 @@
 #include <fstream>
 #include <iostream>
 #include <algorithm>
+#include "BasicLogging.h"
 
 Parser::Parser(const std::string& string, const std::string& File, int Lineno, bool IncrementLineno, Variable::Origin oOrigin) :
     file(File),
@@ -98,9 +100,22 @@ std::string Parser::GetLine(bool inCommand)
     // concatenate lines
     if (!rv.empty())
     {
-        while (rv[rv.size() - 1] == '\\')
+        // We need to know if this is a file that is generally "\r\n", "\r", or "\n", TTY-type is windows, "\r" is mac, and "\n" is
+        // linux
+        size_t location = rv.rfind('\\');
+        if (location != rv.npos && (rv.size() - 3) < location)
         {
-            if (rv.size() > 1 && rv[rv.size() - 2] == '\\')
+            std::string val_plus_rv = "Value of rv that includes a backslash in the last 3 lines, starting next line:\n";
+            val_plus_rv += rv;
+            OrangeC::Utils::BasicLogger::log(((int)OrangeC::Utils::VerbosityLevels::VERB_EXTREMEDEBUG), std::move(val_plus_rv));
+        }
+        while ((rv[rv.size() - 1] == '\\' || (rv[rv.size() - 1] == '\r' && rv[rv.size() - 2] == '\\')))
+        // while (rv[rv.size() - 1] == '\\')
+        {
+
+            if (rv.size() > 1 && ((rv[rv.size() - 2] == '\\' && rv[rv.size() - 1] != '\r') ||
+                                  (rv.size() > 2 && rv[rv.size() - 1] == '\r' && rv[rv.size() - 3] == '\\')))
+            // if (rv.size() > 1 && rv[rv.size() - 2] == '\\')
             {
                 break;
             }
@@ -112,6 +127,9 @@ std::string Parser::GetLine(bool inCommand)
             rv.replace(rv.size() - 1, 1, " ");
             lineno++;
             std::string next = Eval::ExtractFirst(remaining, "\n");
+            OrangeC::Utils::BasicLogger::log(((int)OrangeC::Utils::VerbosityLevels::VERB_EXTREMEDEBUG) + 3,
+                                             "The value of next is: ", next);
+
             rv += next;
             if (next.empty())
                 break;
@@ -140,11 +158,28 @@ std::string Parser::RemoveComment(const std::string& line)
             if (!n || rv[n - 1] != '\\')
             {
                 rv.replace(n, rv.size() - n, "");
+                break;
             }
             else
             {
-                rv.replace(n, 1, "");
-                start = n + 1;
+                // the rules for this aren't documented very well BUT
+                // mingw32-make counts the number of '\\' characters before the '#'
+                // for even count remove half the characters + everything after that
+                // for odd count remove half the characters + 1 and leave the '#' and everything after it intact
+                int count = 0;
+                while (n > 0 && rv[n - 1] == '\\')
+                    count++, n--;
+                n += count / 2;
+                if (count % 2)
+                {
+                    rv.replace(n, count / 2 + 1, "");
+                    start = n + 1;
+                }
+                else
+                {
+                    rv.replace(n, rv.size() - n, "");
+                    break;
+                }
             }
         }
     } while (n != std::string::npos);
@@ -189,7 +224,14 @@ size_t Parser::UnfetteredChar(const std::string& line, char ch) const
         }
         else if (line[i] == '$')
         {
-            i += Eval::MacroSpan(line, i + 1);
+            size_t v = Eval::MacroSpan(line, i + 1);
+            if (v == std::string::npos)
+                return v;
+            i += v;
+            if (i > line.size())
+            {
+                return std::string::npos;
+            }
             charInWord = 0;
         }
         else
@@ -356,7 +398,8 @@ bool Parser::ParseLine(const std::string& line)
     }
     return rv;
 }
-bool Parser::ParseAssign(const std::string& left, const std::string& right, bool dooverride, bool exportSpecific, std::shared_ptr<RuleList> ruleList)
+bool Parser::ParseAssign(const std::string& left, const std::string& right, bool dooverride, bool exportSpecific,
+                         std::shared_ptr<RuleList> ruleList)
 {
     if (left == ".VARIABLES")
         return true;
@@ -389,7 +432,8 @@ bool Parser::ParseAssign(const std::string& left, const std::string& right, bool
         v->SetExport(exportSpecific);
     return true;
 }
-bool Parser::ParseRecursiveAssign(const std::string& left, const std::string& right, bool dooverride, bool exportSpecific, std::shared_ptr<RuleList> ruleList)
+bool Parser::ParseRecursiveAssign(const std::string& left, const std::string& right, bool dooverride, bool exportSpecific,
+                                  std::shared_ptr<RuleList> ruleList)
 {
     if (left == ".VARIABLES")
         return true;
@@ -421,7 +465,8 @@ bool Parser::ParseRecursiveAssign(const std::string& left, const std::string& ri
         v->SetExport(exportSpecific);
     return true;
 }
-bool Parser::ParsePlusAssign(const std::string& left, const std::string& right, bool dooverride, bool exportSpecific, std::shared_ptr<RuleList> ruleList)
+bool Parser::ParsePlusAssign(const std::string& left, const std::string& right, bool dooverride, bool exportSpecific,
+                             std::shared_ptr<RuleList> ruleList)
 {
     if (left == ".VARIABLES")
         return true;
@@ -458,7 +503,8 @@ bool Parser::ParsePlusAssign(const std::string& left, const std::string& right, 
         v->SetExport(exportSpecific);
     return true;
 }
-bool Parser::ParseQuestionAssign(const std::string& left, const std::string& right, bool dooverride, bool exportSpecific, std::shared_ptr<RuleList> ruleList)
+bool Parser::ParseQuestionAssign(const std::string& left, const std::string& right, bool dooverride, bool exportSpecific,
+                                 std::shared_ptr<RuleList> ruleList)
 {
     if (left == ".VARIABLES")
         return true;
@@ -536,7 +582,8 @@ bool Parser::ParseRule(const std::string& left, const std::string& line)
     {
         iline = line;
     }
-    Eval l(left, true);
+    bool grouped = left.size() && left[left.size() - 1] == '&';
+    Eval l(grouped ? left.substr(0, left.size() - 1) : left, true);
     std::string ls = l.Evaluate();
     if (ls.find(".SECONDEXPANSION") != std::string::npos)
     {
@@ -591,16 +638,16 @@ bool Parser::ParseRule(const std::string& left, const std::string& line)
             switch (mode)
             {
                 case rasn:
-                    rv &= ParseRecursiveAssign(l, r, false, !private_, ruleList);
+                    rv &= ParseRecursiveAssign(l, r, false, !private_, std::move(ruleList));
                     break;
                 case pasn:
-                    rv &= ParsePlusAssign(l, r, false, !private_, ruleList);
+                    rv &= ParsePlusAssign(l, r, false, !private_, std::move(ruleList));
                     break;
                 case qasn:
-                    rv &= ParseQuestionAssign(l, r, false, !private_, ruleList);
+                    rv &= ParseQuestionAssign(l, r, false, !private_, std::move(ruleList));
                     break;
                 case asn:
-                    rv &= ParseAssign(l, r, false, !private_, ruleList);
+                    rv &= ParseAssign(l, r, false, !private_, std::move(ruleList));
                     break;
             }
         }
@@ -672,6 +719,7 @@ bool Parser::ParseRule(const std::string& left, const std::string& line)
         else
         {
         join:
+
             n = UnfetteredChar(line, ':');
             if (n != std::string::npos)
             {
@@ -706,7 +754,7 @@ bool Parser::ParseRule(const std::string& left, const std::string& line)
                 else
                     iparsed += cur + " ";
             }
-            iline = iparsed;
+            iline = std::move(iparsed);
             n = iline.find_first_of('|');
             if (n != std::string::npos)
             {
@@ -721,7 +769,7 @@ bool Parser::ParseRule(const std::string& left, const std::string& line)
                 }
                 else
                 {
-                    orderPrereqs = iline;
+                    orderPrereqs = std::move(iline);
                 }
             }
             else
@@ -735,7 +783,7 @@ bool Parser::ParseRule(const std::string& left, const std::string& line)
                 }
                 else
                 {
-                    prereqs = iline;
+                    prereqs = std::move(iline);
                 }
             }
         }
@@ -743,6 +791,8 @@ bool Parser::ParseRule(const std::string& left, const std::string& line)
         *CommandContainer::Instance() += lastCommand;
         if (hasCmd)
             *lastCommand += command;
+        if (grouped)
+            lastCommand->SetGrouped();
         Eval p(prereqs, true);
         std::string ps = p.Evaluate();
         Eval o(orderPrereqs, true);
@@ -781,12 +831,12 @@ bool Parser::ParseRule(const std::string& left, const std::string& line)
                     if (Eval::MatchesPattern(cur, targetPattern, start) != std::string::npos)
                     {
                         stem = Eval::FindStem(cur, targetPattern);
-                        std::string ps2 = ps1;
+                        std::string ps2 = std::move(ps1);
                         ps2 = ReplaceAllStems(stem, ps2);
                         std::string os1 = os;
                         os1 = ReplaceAllStems(stem, os1);
-                        rule = std::make_shared<Rule>(cur, ps2, os1, lastCommand, file, lineno, dontCare, ignore, silent, make, precious,
-                                        secondaryExpansionEnabled);
+                        rule = std::make_shared<Rule>(cur, ps2, os1, lastCommand, file, lineno, dontCare, ignore, silent, make,
+                                                      precious, secondaryExpansionEnabled);
                     }
                     else
                     {
@@ -796,7 +846,7 @@ bool Parser::ParseRule(const std::string& left, const std::string& line)
                 else
                 {
                     rule = std::make_shared<Rule>(cur, ps1, os, lastCommand, file, lineno, dontCare, ignore, silent, make, precious,
-                                    secondaryExpansionEnabled, !orderPrereqs.empty() || !prereqs.empty());
+                                                  secondaryExpansionEnabled, !orderPrereqs.empty() || !prereqs.empty());
                 }
                 std::shared_ptr<RuleList> ruleList = RuleContainer::Instance()->Lookup(cur);
                 if (!ruleList)
@@ -805,7 +855,7 @@ bool Parser::ParseRule(const std::string& left, const std::string& line)
                     ruleList->SetRelated(related);
                     *RuleContainer::Instance() += ruleList;
                 }
-                ruleList->SetTargetPatternStem(stem);
+                ruleList->SetTargetPatternStem(std::move(stem));
                 if (rule)
                 {
                     rule->SetBuiltin(builtin);
@@ -891,7 +941,8 @@ bool Parser::ParseCommand(const std::string& line)
         if (n != std::string::npos && n == line.size() - 3)
         {
             // this handles && as a temporary command file marker
-            // note that we are not supporting it if you use a line continuation in conjunction with it and it must be the last thing on a line
+            // note that we are not supporting it if you use a line continuation in conjunction with it and it must be the last
+            // thing on a line
             char match = line[n + 2];
             bool found = false;
             while (!remaining.empty() && !found)
@@ -918,9 +969,9 @@ bool Parser::ConditionalArgument(std::string& line)
     bool rv = true;
     size_t s = line.find_first_not_of(' ');
     size_t e = line.find_last_not_of(' ');
-    if (s >= 0 && (line[s] == '\'' || line[s] == '"'))
+    if (s != std::string::npos && (line[s] == '\'' || line[s] == '"'))
     {
-        if (e < 0 || e == s || line[e] != line[s])
+        if (e == std::string::npos || e == s || line[e] != line[s])
 
         {
             Eval::error("Invalid string constant in conditional");
@@ -948,50 +999,16 @@ bool Parser::ParseCond(const std::string& line, bool eq)
         int n = line.find_first_not_of(' ');
         std::string left;
         std::string right;
-        if (line[n] == '(')
+        if (n != std::string::npos)
         {
-            int m = line.find_last_not_of(' ');
-            if (m >= 0 && line[m] == ')')
+            if (line[n] == '(')
             {
-                if (!Eval::TwoArgs(line.substr(n + 1, m - 1 - n), left, right))
+                int m = line.find_last_not_of(' ');
+                if (m >= 0 && line[m] == ')')
                 {
-                    rv = false;
-                }
-            }
-            else
-            {
-                Eval::error("Conditional syntax error");
-                rv = false;
-            }
-        }
-        else
-        {
-            int m = line.find_first_of(line[n], n + 1);
-            if (m == std::string::npos)
-            {
-                Eval::error("Conditional syntax error");
-                rv = false;
-            }
-            else
-            {
-                left = line.substr(n + 1, m - 1);
-                n = line.find_first_not_of(' ', m + 1);
-                if (n >= 0 && (line[n] == '"' || line[n] == '\''))
-                {
-                    m = line.find_first_of(line[n], n + 1);
-                    if (m == std::string::npos)
+                    if (!Eval::TwoArgs(line.substr(n + 1, m - 1 - n), left, right))
                     {
-                        Eval::error("Conditional syntax error");
                         rv = false;
-                    }
-                    else
-                    {
-                        right = line.substr(n + 1, m - 1);
-                        if (line.find_first_not_of(' ', m + 1) != std::string::npos)
-                        {
-                            Eval::error("Conditional syntax error");
-                            rv = false;
-                        }
                     }
                 }
                 else
@@ -1000,22 +1017,61 @@ bool Parser::ParseCond(const std::string& line, bool eq)
                     rv = false;
                 }
             }
-        }
-        if (rv)
-        {
-            bool b;
-            Eval l(left, false);
-            left = l.Evaluate();
-            Eval r(right, false);
-            right = r.Evaluate();
-            if (eq)
-                b = left != right;
             else
-                b = left == right;
-            skips.push_front(b);
+            {
+                int m = line.find_first_of(line[n], n + 1);
+                if (m == std::string::npos)
+                {
+                    Eval::error("Conditional syntax error");
+                    rv = false;
+                }
+                else
+                {
+                    left = line.substr(n + 1, m - 1);
+                    n = line.find_first_not_of(' ', m + 1);
+                    if (n >= 0 && (line[n] == '"' || line[n] == '\''))
+                    {
+                        m = line.find_first_of(line[n], n + 1);
+                        if (m == std::string::npos)
+                        {
+                            Eval::error("Conditional syntax error");
+                            rv = false;
+                        }
+                        else
+                        {
+                            right = line.substr(n + 1, m - 1);
+                            if (line.find_first_not_of(' ', m + 1) != std::string::npos)
+                            {
+                                Eval::error("Conditional syntax error");
+                                rv = false;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        Eval::error("Conditional syntax error");
+                        rv = false;
+                    }
+                }
+            }
+            if (rv)
+            {
+                bool b;
+                Eval l(left, false);
+                left = l.Evaluate();
+                Eval r(right, false);
+                right = r.Evaluate();
+                if (eq)
+                    b = left != right;
+                else
+                    b = left == right;
+                skips.push_front(b);
+            }
+            else
+            {
+                skips.push_front(false);
+            }
         }
-        else
-            skips.push_front(false);
     }
     return rv;
 }

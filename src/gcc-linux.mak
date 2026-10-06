@@ -1,6 +1,6 @@
 # Software License Agreement
 # 
-#     Copyright(C) 1994-2022 David Lindauer, (LADSoft)
+#     Copyright(C) 1994-2025 David Lindauer, (LADSoft)
 # 
 #     This file is part of the Orange C Compiler package.
 # 
@@ -19,6 +19,7 @@
 # 
 #     contact information:
 #         email: TouchStone222@runbox.com <David Lindauer>
+# 
 # 
 
 ifeq "$(COMPILER)" "gcc-linux"
@@ -39,14 +40,15 @@ endif
 
 LLIB_DEPENDENCIES = $(notdir $(filter-out $(EXCLUDE) $(MAIN_DEPENDENCIES), $(CPP_deps) $(C_deps) $(ASM_deps) $(TASM_deps)))
 
-
-#CC=gcc
-#CXX=g++
-CCFLAGS = -c -D__MSVCRT__ -U__STRICT_ANSI__ -DHAVE_UNISTD_H=1 -DSQLITE_OS_UNIX -D_unlink=unlink -Dstricmp=strcasecmp -Dstrnicmp=strncasecmp -Wno-int-to-pointer-cast -D_strnicmp=strncasecmp
-
-CPPFLAGS = -std=c++14
+CCFLAGS = -c -DHAVE_UNISTD_H=1 -DSQLITE_OS_UNIX
+ifneq "$(DEBUG)" ""
+CCFLAGS += -Og -g
+else
+CCFLAGS += -O2
+endif
+CPPFLAGS = -std=gnu++17
 LINK=ld
-LFLAGS=-L$(_LIBDIR)
+LFLAGS=-L$(_LIBDIR) -lm
 
 LIB=ar
 LIBFLAGS= -r -s
@@ -63,11 +65,14 @@ ifneq "$(INCLUDES)" ""
 CINCLUDES:=$(addprefix -I,$(INCLUDES))
 endif
 
+CC=gcc
+CXX=g++
+
 DEFINES:=$(addprefix -D,$(DEFINES))
 DEFINES:=$(subst @, ,$(DEFINES))
 
 CFLAGS := $(CCFLAGS) $(CINCLUDES) $(DEFINES) -DGNUC -std=c99
-CXXFLAGS := $(CCFLAGS) $(CINCLUDES) -fpermissive $(DEFINES) -DGNUC -std=c++14
+CXXFLAGS := $(CCFLAGS) $(CINCLUDES) -fpermissive $(DEFINES) -DGNUC -std=gnu++17
 
 ifeq "$(TARGET)" "GUI"
 LFLAGS := $(LFLAGS) -s -Wl,--subsystem,windows
@@ -103,13 +108,13 @@ LDEPS2 := $(addsuffix .a, $(LDEPS2))
 LMAIN := $(addprefix $(_OUTPUTDIR)/,$(MAIN_DEPENDENCIES) $(RES_deps))
 LMAIN := $(subst \,/,$(LMAIN))
 
-$(NAME).exe: $(addprefix $(_OUTPUTDIR)/,$(MAIN_DEPENDENCIES)) $(LDEPS2) $(RES_deps)
-	$(CC) $(LFLAGS) -o $(NAME).exe $(LMAIN) $(LDEPS) $(COMPLIB) $(DEF_DEPENDENCIES)
+$(NAME): $(addprefix $(_OUTPUTDIR)/,$(MAIN_DEPENDENCIES)) $(LDEPS2) $(RES_deps)
+	$(CC) $(LFLAGS) -o $(NAME) $(LMAIN) -Wl,--start-group $(LDEPS) -Wl,--end-group $(COMPLIB) $(DEF_DEPENDENCIES)
 
-%.exe: %.c
+%: %.c
 	$(CC) $(LFLAGS) -o $@ $^ $(COMPLIB)
 
-%.exe: %.cpp
+%: %.cpp
 	$(CC) $(LFLAGS) -o $@ $^ $(COMPLIB)
 
 endif

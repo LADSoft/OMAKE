@@ -1,0 +1,10 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Win32" />
+    <Platform Name="x64" />
+  </Configurations>
+  <Project Path="omake/omake.vcxproj" Id="f6c325ca-be29-419a-9357-5b480068c9f8">
+    <BuildDependency Project="util/util.lib.vcxproj" />
+  </Project>
+  <Project Path="util/util.lib.vcxproj" Id="72430015-06c0-42a2-b9ec-d0e5e2eae83d" />
+</Solution>

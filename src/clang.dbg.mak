@@ -1,6 +1,6 @@
 # Software License Agreement
 # 
-#     Copyright(C) 1994-2022 David Lindauer, (LADSoft)
+#     Copyright(C) 1994-2025 David Lindauer, (LADSoft)
 # 
 #     This file is part of the Orange C Compiler package.
 # 
@@ -19,6 +19,7 @@
 # 
 #     contact information:
 #         email: TouchStone222@runbox.com <David Lindauer>
+# 
 # 
 
 ifeq "$(COMPILER)" "CLANG"
@@ -68,8 +69,8 @@ DEFINES := $(addprefix /D,$(DEFINES))
 DEFINES := $(subst @, ,$(DEFINES))
 LIB_DEPENDENCIES := $(foreach file,$(addsuffix $(LIB_EXT),$(LIB_DEPENDENCIES)), $(_LIBDIR)\$(file))
 
-CFLAGS := $(CCFLAGS) $(CINCLUDES) $(DEFINES) /DMICROSOFT /DWIN32 -z
-CXXFLAGS := $(CCFLAGS) $(CINCLUDES) $(DEFINES) /DMICROSOFT /DWIN32 -z
+CFLAGS := $(CCFLAGS) $(CINCLUDES) $(DEFINES) -z
+CXXFLAGS := $(CCFLAGS) $(CINCLUDES) $(DEFINES) /std:c++17 -z
 
 ifeq "$(TARGET)" "GUI"
 LFLAGS:= $(LFLAGS) /SUBSYSTEM:WINDOWS

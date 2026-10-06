@@ -1,25 +1,26 @@
 /* Software License Agreement
- * 
- *     Copyright(C) 1994-2023 David Lindauer, (LADSoft)
- * 
+ *
+ *     Copyright(C) 1994-2026 David Lindauer, (LADSoft)
+ *
  *     This file is part of the Orange C Compiler package.
- * 
+ *
  *     The Orange C Compiler package is free software: you can redistribute it and/or modify
  *     it under the terms of the GNU General Public License as published by
  *     the Free Software Foundation, either version 3 of the License, or
  *     (at your option) any later version.
- * 
+ *
  *     The Orange C Compiler package is distributed in the hope that it will be useful,
  *     but WITHOUT ANY WARRANTY; without even the implied warranty of
  *     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *     GNU General Public License for more details.
- * 
+ *
  *     You should have received a copy of the GNU General Public License
  *     along with Orange C.  If not, see <http://www.gnu.org/licenses/>.
- * 
+ *
  *     contact information:
  *         email: TouchStone222@runbox.com <David Lindauer>
- * 
+ *
+ *
  */
 
 #include "MakeMain.h"
@@ -31,12 +32,15 @@
 #include "Parser.h"
 #include "CmdFiles.h"
 #include "Utils.h"
+#include "BasicLogging.h"
 #include <fstream>
 #include <list>
 #include <cstdlib>
 #include <iostream>
 #include <algorithm>
 #include <unordered_set>
+#include <thread>
+#include <chrono>
 std::unordered_map<std::string, Depends*> Depends::all;
 std::string Maker::firstGoal;
 std::unordered_map<std::string, std::string> Maker::filePaths;
@@ -50,55 +54,59 @@ Maker::Maker(bool Silent, bool DisplayOnly, bool IgnoreResults, bool Touch, Outp
     touch(Touch),
     rebuildAll(RebuildAll),
     keepResponseFiles(KeepResponseFiles),
-    newFiles(NewFiles),
-    oldFiles(OldFiles),
+    newFiles(std::move(NewFiles)),
+    oldFiles(std::move(OldFiles)),
     outputType(Type),
     lowResolutionTime(false),
     dependsNesting(0)
 {
     Variable* v = VariableContainer::Instance()->Lookup("SHELL");
-    std::string shtest = v->GetValue();
-    std::transform(shtest.begin(), shtest.end(), shtest.begin(), ::toupper);
-    OS::SetSHEXE(shtest.find("SH.EXE") != std::string::npos || shtest.find("BASH.EXE") != std::string::npos);
+    if (v)
+    {
+        std::string shtest = v->GetValue();
+        std::transform(shtest.begin(), shtest.end(), shtest.begin(), ::toupper);
+        OS::SetSHEXE(shtest.find("SH.EXE") != std::string::npos || shtest.find("BASH.EXE") != std::string::npos);
+    }
+    else
+    {
+        OS::SetSHEXE(false);
+    }
 }
 Maker::~Maker() {}
 void Maker::SetFirstGoal(const std::string& name)
 {
-    static std::unordered_set<std::string> InvalidCandidates
-    {
-        ".SUFFIXES",
-        ".DEFAULT",
-        ".EXPORT_ALL_VARIABLES",
-        ".INTERMEDIATE",
-        ".PRECIOUS",
-        ".SECONDARY",
-        ".SILENT",
-        ".IGNORE",
-        ".SECONDEXPANSION",
-        ".PHONY",
-        ".DELTE_ON_ERROR",
-        ".LOW_RESOLUTION_TIME",
-        ".NOTPARALLEL",
-        ".ONESHELL",
-        ".POSIX",
-        ".RECURSIVE",
-        ".MAIN",
-        ".BEGIN",
-        ".END",
-        ".INCLUDES",
-        ".INTERRUPT",
-        ".LIBS",
-        ".MAKEFILEDEPS",
-        ".MFLAGS",
-        ".MAKEFLAGS",
-        ".NOTPARALLEL",
-        ".ORDER",
-        ".SHELL",
-        ".WARN"
-    };
+    static std::unordered_set<std::string> InvalidCandidates{".SUFFIXES",
+                                                             ".DEFAULT",
+                                                             ".EXPORT_ALL_VARIABLES",
+                                                             ".INTERMEDIATE",
+                                                             ".PRECIOUS",
+                                                             ".SECONDARY",
+                                                             ".SILENT",
+                                                             ".IGNORE",
+                                                             ".SECONDEXPANSION",
+                                                             ".PHONY",
+                                                             ".DELTE_ON_ERROR",
+                                                             ".LOW_RESOLUTION_TIME",
+                                                             ".NOTPARALLEL",
+                                                             ".ONESHELL",
+                                                             ".POSIX",
+                                                             ".RECURSIVE",
+                                                             ".MAIN",
+                                                             ".BEGIN",
+                                                             ".END",
+                                                             ".INCLUDES",
+                                                             ".INTERRUPT",
+                                                             ".LIBS",
+                                                             ".MAKEFILEDEPS",
+                                                             ".MFLAGS",
+                                                             ".MAKEFLAGS",
+                                                             ".NOTPARALLEL",
+                                                             ".ORDER",
+                                                             ".SHELL",
+                                                             ".WARN"};
     if (firstGoal.empty())
     {
-        if(InvalidCandidates.find(name) == InvalidCandidates.end())
+        if (InvalidCandidates.find(name) == InvalidCandidates.end())
             firstGoal = name;
     }
 }
@@ -202,7 +210,8 @@ std::unique_ptr<Depends> Maker::Dependencies(const std::string& goal, const std:
                 {
                     Time current;
                     std::string thisOne = Eval::ExtractFirst(working, " ");
-                    auto dp = Dependencies(thisOne, foundPath, current, err && !rule->IsDontCare(), false, rule->File(), rule->Line());
+                    auto dp =
+                        Dependencies(thisOne, foundPath, current, err && !rule->IsDontCare(), false, rule->File(), rule->Line());
                     auto dependentRuleList = RuleContainer::Instance()->Lookup(thisOne);
                     ruleList->CopyExports(dependentRuleList);
                     if (current > dependsTime)
@@ -231,8 +240,8 @@ std::unique_ptr<Depends> Maker::Dependencies(const std::string& goal, const std:
                     bool exists = !!goalTime;
                     if (!exists)
                     {
-                        auto dp =
-                            Dependencies(thisOne, preferredPath, current, err && !rule->IsDontCare(), false, rule->File(), rule->Line());
+                        auto dp = Dependencies(thisOne, preferredPath, current, err && !rule->IsDontCare(), false, rule->File(),
+                                               rule->Line());
                         auto dependentRuleList = RuleContainer::Instance()->Lookup(thisOne);
                         ruleList->CopyExports(dependentRuleList);
                         if (dp)
@@ -268,7 +277,7 @@ std::unique_ptr<Depends> Maker::Dependencies(const std::string& goal, const std:
         {
             if (SearchImplicitRules(goal, preferredPath, true, timeval))
             {
-                rv = Dependencies(goal, preferredPath, timeval, err, false, file, line);
+                rv = Dependencies(goal, preferredPath, timeval, err, false, std::move(file), line);
             }
             else if (err)
             {
@@ -282,7 +291,7 @@ std::unique_ptr<Depends> Maker::Dependencies(const std::string& goal, const std:
                         if (!RuleContainer::Instance()->OnList(goal, ".PHONY"))
                         {
                             missingTarget = true;
-                            Eval::error("No rule to make target '" + goal + "'", file, line);
+                            Eval::error("No rule to make target '" + goal + "'", std::move(file), line);
                         }
                     }
                     else if (time > timeval)
@@ -335,6 +344,7 @@ std::string Maker::GetFileTime(const std::string& goal, const std::string& prefe
 {
     std::string rv;
     std::string internalGoal = goal;
+    Utils::ReplaceAll(internalGoal, SpaceThunk, " ");
     if (internalGoal.size() > 1 && internalGoal[0] == '"')
     {
         internalGoal = internalGoal.substr(1, internalGoal.size() - 2);
@@ -357,9 +367,9 @@ std::string Maker::GetFileTime(const std::string& goal, const std::string& prefe
             rv = cur;  // return value is the path, with a slash on the end
             if (rv == "./")
                 rv = "";
-            timeval = OS::GetFileTime(name);
+            timeval = OS::GetFileTime(std::move(name));
             if (rv != "")
-                filePaths[internalGoal] = cur;
+                filePaths[internalGoal] = std::move(cur);
             break;
         }
     }
@@ -629,13 +639,24 @@ void Maker::GetEnvironment(EnvironmentStrings& env)
         if (exportAll || var.second->GetExport())
         {
             EnvEntry a((var.first), var.second->GetValue());
-            env.push_back(a);
+            env.push_back(std::move(a));
         }
     }
 }
-void Maker::CallRunner(Runner&& runner, Depends* depend, EnvironmentStrings* env, bool keepGoing, std::promise<int> promise) {
+void Maker::CallRunner(Runner&& runner, Depends* depend, EnvironmentStrings* env, bool keepGoing, std::promise<int> promise)
+{
     std::list<std::shared_ptr<RuleList>> list;
     promise.set_value(runner.RunOne(&list, depend, env, keepGoing));
+    std::string goal_value = "";
+    if (depend)
+    {
+        goal_value = depend->GetGoal();
+    }
+    else
+    {
+        goal_value = "Depend was null'd out";
+    }
+    OrangeC::Utils::BasicLogger::debug("Cleaning a runner: " + goal_value);
 }
 int Maker::RunCommands(bool keepGoing)
 {
@@ -654,14 +675,15 @@ int Maker::RunCommands(bool keepGoing)
 
     OS::JobInit();
     std::list<std::future<int>> workingList;
-    std::list<std::thread> workingThreads;
     int rv = 0;
     for (auto& i : depends)
     {
         std::promise<int> promise;
         workingList.push_back(promise.get_future());
-        auto thrd = std::thread(CallRunner, runner, i.get(), &env, keepGoing, std::move(promise));
-        workingThreads.push_back(std::move(thrd));
+        OrangeC::Utils::BasicLogger::debug("Creating a runner: " + i->GetGoal());
+        std::thread(CallRunner, runner, i.get(), &env, keepGoing, std::move(promise)).detach();
+        using namespace std::chrono_literals;
+        std::this_thread::sleep_for(20ms);
         if (MakeMain::jobs.GetValue() == 1)
         {
             int rv1 = workingList.back().get();
@@ -699,8 +721,6 @@ int Maker::RunCommands(bool keepGoing)
         }
     }
 
-    for (auto&& w : workingThreads)
-        w.join();
     OS::JobRundown();
     for (auto& d : depends)
     {

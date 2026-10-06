@@ -1,29 +1,31 @@
 /* Software License Agreement
- * 
- *     Copyright(C) 1994-2023 David Lindauer, (LADSoft)
- * 
+ *
+ *     Copyright(C) 1994-2026 David Lindauer, (LADSoft)
+ *
  *     This file is part of the Orange C Compiler package.
- * 
+ *
  *     The Orange C Compiler package is free software: you can redistribute it and/or modify
  *     it under the terms of the GNU General Public License as published by
  *     the Free Software Foundation, either version 3 of the License, or
  *     (at your option) any later version.
- * 
+ *
  *     The Orange C Compiler package is distributed in the hope that it will be useful,
  *     but WITHOUT ANY WARRANTY; without even the implied warranty of
  *     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *     GNU General Public License for more details.
- * 
+ *
  *     You should have received a copy of the GNU General Public License
  *     along with Orange C.  If not, see <http://www.gnu.org/licenses/>.
- * 
+ *
  *     contact information:
  *         email: TouchStone222@runbox.com <David Lindauer>
- * 
+ *
+ *
  */
-
 #ifdef HAVE_UNISTD_H
 #    include <unistd.h>
+#    include <glob.h>
+#    include <string.h>
 #    define _access access
 #else
 #    include <io.h>
@@ -31,12 +33,17 @@
 
 #include "CmdFiles.h"
 #include "CmdSwitch.h"
-
+// #include <filesystem>
 using namespace std;  // borland puts the io stuff in the std namespace...
                       // microsoft does not seem to.
 
+#ifdef TARGET_OS_WINDOWS
 const char* CmdFiles::DIR_SEP = "\\";
 const char* CmdFiles::PATH_SEP = ";";
+#else
+const char* CmdFiles::DIR_SEP = "/";
+const char* CmdFiles::PATH_SEP = ":";
+#endif
 
 CmdFiles::~CmdFiles() {}
 bool CmdFiles::Add(char** array, bool recurseDirs)
@@ -46,6 +53,14 @@ bool CmdFiles::Add(char** array, bool recurseDirs)
         Add(std::string(*array), recurseDirs);
         array++;
     }
+    return true;
+}
+bool CmdFiles::Add(std::string& name, const std::map<int, std::shared_ptr<CmdSwitchBase>>& switches)
+{
+    int index = names.size();
+    Add(name, false);
+    for (; index < names.size(); ++index)
+        names[index].activeSwitches = switches;
     return true;
 }
 bool CmdFiles::RecurseDirs(const std::string& path, const std::string& name, bool recurseDirs)
@@ -73,6 +88,15 @@ bool CmdFiles::RecurseDirs(const std::string& path, const std::string& name, boo
         } while (_findnext(handle, &find) != -1);
         _findclose(handle);
     }
+#else
+    glob_t glob_fils;
+    memset(&glob_fils, 0, sizeof(glob_fils));
+    int retval = glob(q.c_str(), GLOB_NOSORT | GLOB_TILDE | GLOB_ONLYDIR, NULL, &glob_fils);
+    for (size_t i = 0; i < glob_fils.gl_pathc; i++)
+    {
+        rv |= Add(std::string(glob_fils.gl_pathv[i]) + DIR_SEP + name, recurseDirs);
+    }
+    globfree(&glob_fils);
 #endif
     return rv;
 }
@@ -120,14 +144,31 @@ bool CmdFiles::Add(const std::string& name, bool recurseDirs, bool subdirs)
                 if (strcmp(find.name, ".") != 0 && strcmp(find.name, "..") != 0)
                 {
                     std::string file(path + std::string(find.name));
-                    names.push_back(file);
+                    names.push_back(std::move(FileEntry(std::move(file))));
                     rv = true;
                 }
             }
         } while (_findnext(handle, &find) != -1);
         _findclose(handle);
     }
+#else
+    glob_t glob_fils;
+    memset(&glob_fils, 0, sizeof(glob_fils));
+    // sorting on this is being disabled so we don't call qsort when someone doesn't ask.
+    // I don't know if this matters to anyone -- chugga_fan
+    int retval = glob(name.c_str(), GLOB_NOSORT | GLOB_TILDE | GLOB_MARK, NULL, &glob_fils);
+    for (size_t i = 0; i < glob_fils.gl_pathc; i++)
+    {
+        std::string possible = std::string(glob_fils.gl_pathv[i]);
+        if (possible[possible.size() - 1] != '/')
+        {
+            names.push_back(std::move(FileEntry(possible)));
+            rv = true;
+        }
+    }
+    globfree(&glob_fils);
 #endif
+
     if (recurseDirs)
     {
         rv |= RecurseDirs(path, lname, recurseDirs);
@@ -136,7 +177,7 @@ bool CmdFiles::Add(const std::string& name, bool recurseDirs, bool subdirs)
     {
         if (name.find_first_of('*') == std::string::npos && name.find_first_of('?') == std::string::npos)
         {
-            names.push_back(name);
+            names.push_back(std::move(FileEntry(name)));
             rv = true;
         }
     }
@@ -176,34 +217,39 @@ bool CmdFiles::AddFromPath(const std::string& name, const std::string& path)
         n = m + 1;
         if (curpath.size() != 0 && curpath.substr(curpath.size() - 1, curpath.size()) != DIR_SEP)
         {
-           curpath += DIR_SEP;
+            curpath += DIR_SEP;
         }
         curpath += internalName;
         if (_access(curpath.c_str(), 0) == 0)
         {
-            names.push_back(curpath);
+            names.push_back(std::move(FileEntry(std::move(curpath))));
             rv = true;
             break;
         }
     }
     if (!rv)
     {
-        names.push_back(name);
+        names.push_back(std::move(FileEntry(name)));
         rv = true;
     }
     return rv;
 }
 bool CmdFiles::Add(CmdSwitchFile& switchFile)
 {
-    if (switchFile.argv)
-        Add(switchFile.argv.get() + 1);
+    if (switchFile.files)
+    {
+        for (auto&& fileEntry : *switchFile.files)
+        {
+            names.push_back(std::move(fileEntry));
+        }
+    }
     return true;
 }
 void CmdFiles::Remove(const std::string& name)
 {
     for (int i = 0; i < names.size(); i++)
     {
-        if (names[i] == name)
+        if (names[i].Name == name)
         {
             for (; i < names.size() - 1; i++)
                 names[i] = names[i + 1];

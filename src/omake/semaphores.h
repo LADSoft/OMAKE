@@ -34,8 +34,8 @@ class Semaphore
     string_type semaphoreName;
 
   public:
-    Semaphore() : null(true), semaphoreName() {}
-    Semaphore(string_type name, int value) : named(true), semaphoreName(name)
+    Semaphore() : null(true), semaphoreName(), handle(semaphore_type()) {}
+    Semaphore(string_type name, int value) : named(true), semaphoreName(std::move(name))
     {
 #ifdef TARGET_OS_WINDOWS
         handle = CreateSemaphore(nullptr, value, value, semaphoreName.c_str());
@@ -46,9 +46,11 @@ class Semaphore
 #else
         // 0 in this case means this is shared internally, not externally
         int ret = sem_init(&handle, 0, value);
-        if (!ret)
+        // https://www.man7.org/linux/man-pages/man3/sem_init.3.html
+        // IT RETURNS 0 ON SUCCESS
+        if (ret != 0)
         {
-            throw std::runtime_error("Semaphore init failed, errno is: " + std::to_string(errno));
+            throw std::system_error(errno, std::system_category());
         }
 #endif
     }
@@ -65,27 +67,29 @@ class Semaphore
 #else
         // 0 in this case means this is shared internally, not externally
         int ret = sem_init(&handle, 0, value);
-        if (!ret)
+        if (ret != 0)
         {
-            throw std::runtime_error("Semaphore init failed, errno is: " + std::to_string(errno));
+            throw std::system_error(errno, std::system_category());
         }
 #endif
     }
+    Semaphore(int value, int init) : Semaphore(value) { Post(init); }
     Semaphore(const string_type& name) : named(true), semaphoreName(name)
     {
 #ifdef TARGET_OS_WINDOWS
         handle = OpenSemaphore(EVENT_ALL_ACCESS, FALSE, name.c_str());
         if (!handle)
         {
-            throw std::invalid_argument("OpenSemaphore failed, presumably bad name, Error code: " + std::to_string(GetLastError()));
+            throw std::invalid_argument("OpenSemaphore failed, presumably bad name, Error code: " + std::to_string(GetLastError()) +
+                                        " name: " + name);
         }
 #else
         auto ret = sem_open(name.c_str(), O_RDWR);
         if (ret == SEM_FAILED)
         {
-            throw std::invalid_argument("OpenSemaphore failed, presumably bad name, Error code: " + std::to_string(errno));
+            throw std::invalid_argument("sem_open failed, presumably bad name, Error code: " + std::to_string(errno));
         }
-        handle =*ret;
+        handle = *ret;
 #endif
     }
     Semaphore& operator=(const Semaphore& other)
@@ -109,7 +113,7 @@ class Semaphore
                 {
                     throw std::invalid_argument("OpenSemaphore failed, presumably bad name, Error code: " + std::to_string(errno));
                 }
-                handle =*ret;
+                handle = *ret;
 #endif
             }
         }
@@ -126,16 +130,16 @@ class Semaphore
             if (!null)
             {
 #ifdef TARGET_OS_WINDOWS
-            CloseHandle(other.handle);
+                CloseHandle(handle);
 #else
-        if (named)
-        {
-            sem_close(&handle);
-        }
-        else
-        {
-            sem_destroy(&handle);
-        }
+                if (named)
+                {
+                    sem_close(&handle);
+                }
+                else
+                {
+                    sem_destroy(&handle);
+                }
 #endif
             }
             named = other.named;
@@ -151,7 +155,7 @@ class Semaphore
                 {
                     throw std::invalid_argument("OpenSemaphore failed, presumably bad name, Error code: " + std::to_string(errno));
                 }
-                handle =*ret;
+                handle = *ret;
 #endif
             }
             other.named = false;
@@ -159,14 +163,14 @@ class Semaphore
 #ifdef TARGET_OS_WINDOWS
             CloseHandle(other.handle);
 #else
-        if (named)
-        {
-            sem_close(&handle);
-        }
-        else
-        {
-            sem_destroy(&handle);
-        }
+            if (named)
+            {
+                sem_close(&handle);
+            }
+            else
+            {
+                sem_destroy(&handle);
+            }
 #endif
         }
         return *this;
@@ -193,14 +197,14 @@ class Semaphore
     {
         return WaitFor(time - std::chrono::steady_clock::now());
     }
-    // return 0: success
-    // return -1: failure
+    // true SUCCESS
+    // false FAILURE
     template <typename Rep, typename Period>
-    bool WaitFor(std::chrono::duration<Rep, Period> time)
+    bool WaitFor(const std::chrono::duration<Rep, Period>& time)
     {
-        std::chrono::milliseconds milli = std::chrono::duration_cast(time);
-        int waitTime = milli.count();
+        std::chrono::milliseconds milli = std::chrono::duration_cast<std::chrono::milliseconds>(time);
 #ifdef WIN32
+        DWORD waitTime = milli.count();
         if (waitTime >= INFINITE)
         {
             throw std::invalid_argument("The time spent for waiting is too long to handle normally");
@@ -218,10 +222,10 @@ class Semaphore
                 return false;
         }
 #else
-        timespec ts = { waitTime/1000, (waitTime%1000) * 1000000 };
+        int waitTime = milli.count();
+        timespec ts = {waitTime / 1000, (waitTime % 1000) * 1000000};
         return !sem_timedwait(&handle, &ts);
 #endif
-
     }
     bool TryWait()
     {
@@ -239,7 +243,7 @@ class Semaphore
                 return false;
         }
 #else
-        return !! sem_trywait(&handle);
+        return !!sem_trywait(&handle);
 #endif
     }
     void Wait()

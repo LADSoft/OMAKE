@@ -1,6 +1,6 @@
 # Software License Agreement
 # 
-#     Copyright(C) 1994-2022 David Lindauer, (LADSoft)
+#     Copyright(C) 1994-2025 David Lindauer, (LADSoft)
 # 
 #     This file is part of the Orange C Compiler package.
 # 
@@ -20,10 +20,13 @@
 #     contact information:
 #         email: TouchStone222@runbox.com <David Lindauer>
 # 
+# 
 
 ifndef COMPILER
 COMPILER := MS
 endif
+
+export compiler
 
 include $(TREETOP)/ms.mak
 include $(TREETOP)/mingw.mak

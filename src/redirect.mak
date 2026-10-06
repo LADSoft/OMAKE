@@ -1,6 +1,6 @@
 # Software License Agreement
 # 
-#     Copyright(C) 1994-2022 David Lindauer, (LADSoft)
+#     Copyright(C) 1994-2026 David Lindauer, (LADSoft)
 # 
 #     This file is part of the Orange C Compiler package.
 # 
@@ -20,19 +20,27 @@
 #     contact information:
 #         email: TouchStone222@runbox.com <David Lindauer>
 # 
+# 
 
 ifndef _TREEROOT
+ifeq "$(COMPILER)" "gcc-linux"
+CURRENT := $(CURDIR)
+else
 CURRENT := $(subst /,\,$(CURDIR))
-_TREEROOT := $(CURRENT)\..\treetop.mak
+endif
+_TREEROOT := $(CURRENT)$(PATHEXT2)..$(PATHEXT2)treetop.mak
 _TREETARGET := $(CURRENT)
 export _TREEROOT
 export _TREETARGET
 
-redirect:
+redirect: $(PRECOMPILE)
 	@$(MAKE) -f $(_TREEROOT) localfiles
 
+ifeq "$(NOFORMAT)" ""
 format:
 	@$(MAKE) -f $(_TREEROOT) format
-	
+else
+format:
+endif
 endif
 

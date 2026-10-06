@@ -1,6 +1,6 @@
 # Software License Agreement
 # 
-#     Copyright(C) 1994-2022 David Lindauer, (LADSoft)
+#     Copyright(C) 1994-2025 David Lindauer, (LADSoft)
 # 
 #     This file is part of the Orange C Compiler package.
 # 
@@ -20,6 +20,7 @@
 #     contact information:
 #         email: TouchStone222@runbox.com <David Lindauer>
 # 
+# 
 
 ifneq "$(COMPILER)" "gcc-linux"
 SHELL=cmd.exe
@@ -36,7 +37,7 @@ DEST=/orangec/dist/ZippedBinaries$(VERNAME).7z
 SRC=/orangec/dist/ZippedBinaries$(VERNAME).zip
 
 DISTRIBUTE:
-ifneq "$(ORANGEC_ONLY)" "YES"
+ifeq "$(WITHOUT_ZIP)" ""
 
 	7z x $(SRC) *
 	7z -r -mx=9 a $(DEST) orangec\* 

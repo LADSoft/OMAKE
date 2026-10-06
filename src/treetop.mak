@@ -1,6 +1,6 @@
 # Software License Agreement
 # 
-#     Copyright(C) 1994-2022 David Lindauer, (LADSoft)
+#     Copyright(C) 1994-2026 David Lindauer, (LADSoft)
 # 
 #     This file is part of the Orange C Compiler package.
 # 
@@ -20,21 +20,23 @@
 #     contact information:
 #         email: TouchStone222@runbox.com <David Lindauer>
 # 
+# 
 
 ifeq "$(PATHEXT2)" ""
 include pathext2.mak
 endif
 
 
-ifneq "$(COMPILER)" "gcc-linux"
-SHELL=cmd.exe
-export SHELL
-endif
-
 ifeq "$(COMPILER)" "gcc-linux"
 MKDIR := mkdir -p
+DEL := rm -rf
+DEL_KEEPDIR := rm -f
+COPY := cp
 else
 MKDIR := mkdir
+DEL := del /Q
+DEL_KEEPDIR := del /Q
+COPY := copy
 endif
 all:
 
@@ -48,7 +50,6 @@ ifeq "$(COMPILER)" "gcc-linux"
 CURRENT := $(CURDIR)
 else
 CURRENT := $(subst /,\,$(CURDIR))
-
 endif
 
 _TARGETDIR:= $(CURRENT)
@@ -61,6 +62,7 @@ COMPARER:=fc /b
 
 
 LIBS:= $(addsuffix .library,$(DIRS))
+TOOLS:= $(addsuffix .tools,$(TOOLDIRS))
 EXES:= $(addsuffix .exefile,$(DIRS))
 CLEANS:= $(addsuffix .clean,$(DIRS))
 DISTS:= $(addsuffix .dist,$(DIRS))
@@ -76,10 +78,10 @@ NULLDEV := NUL
 endif
 
 del:
-	-del /Q  $(_OUTPUTDIR)$(PATHEXT2)*.* 2> $(NULLDEV)
-	-del /Q *.exe 2> $(NULLDEV)
-	-del /Q *.o 2> $(NULLDEV)
-	-del /Q *.odx 2> $(NULLDEV)
+	-$(DEL)  $(_OUTPUTDIR)$(PATHEXT2)*.* 2> $(NULLDEV)
+	-$(DEL) *.exe 2> $(NULLDEV)
+	-$(DEL) *.o 2> $(NULLDEV)
+	-$(DEL) *.odx 2> $(NULLDEV)
 mkdir:
 	-$(MKDIR)  $(_OUTPUTDIR) 2> $(NULLDEV)
 rmdir:
@@ -98,7 +100,11 @@ endif
 ifeq "$(MAIN_DEPENDENCIES)" "$(MAIN_FILE)"
 link:
 else
+ifneq "$(COMPILER)" "gcc-linux"
 link: $(NAME).exe
+else
+link: $(NAME)
+endif
 endif
 
 _OUTPUTDIR = $(_TARGETDIR)$(PATHEXT2)obj$(PATHEXT2)$(OBJ_IND_PATH)
@@ -140,8 +146,8 @@ DISTLIB=$(DISTROOT)$(PATHEXT2)lib
 export DISTLIB
 DISTSTARTUP=$(DISTROOT)$(PATHEXT2)lib$(PATHEXT2)startup
 export DISTSTARTUP
-DISTSTARTUPDOS=$(DISTROOT)$(PATHEXT2)lib$(PATHEXT2)startup$(PATHEXT2)msdos
-export DISTSTARTUPDOS
+#DISTSTARTUPDOS=$(DISTROOT)$(PATHEXT2)lib$(PATHEXT2)startup$(PATHEXT2)msdos
+#export DISTSTARTUPDOS
 DISTSTARTUPWIN=$(DISTROOT)$(PATHEXT2)lib$(PATHEXT2)startup$(PATHEXT2)win32
 export DISTSTARTUPWIN
 DISTADDON=$(DISTROOT)$(PATHEXT2)addon
@@ -158,112 +164,121 @@ else
 endif
 
 export RELEASEPATH
-
+ifneq "$(COMPILER)" "gcc-linux"
 COPYDIR := $(realpath $(DISTROOT)$(PATHEXT2)src$(PATHEXT2)copydir.exe)
+SAFEMKDIR := mkdir
+else
+SAFEMKDIR := mkdir -p
+COPYDIR := $(realpath $(DISTROOT)$(PATHEXT2)src$(PATHEXT2)copydir.exe)
+endif
 export COPYDIR
+export SAFEMKDIR
 
-PEPATCH:=$(realpath $(DISTROOT)$(PATHEXT2)src$(PATHEXT2)pepatch.exe)
-export PEPATCH
-
-RESTUB:=$(realpath $(DISTROOT)$(PATHEXT2)src$(PATHEXT2)restub.exe)
-export RESTUB
-
-RENSEG:=$(realpath $(DISTROOT)$(PATHEXT2)src$(PATHEXT2)renseg.exe)
-export RENSEG
-
-STUB:=$(realpath $(DISTROOT)$(PATHEXT2)src$(PATHEXT2)clibs$(PATHEXT2)platform$(PATHEXT2)dos32$(PATHEXT2)extender$(PATHEXT2)hx$(PATHEXT2)dpmist32.bin)
-export STUB
+#STUB:=$(realpath $(DISTROOT)$(PATHEXT2)src$(PATHEXT2)clibs$(PATHEXT2)platform$(PATHEXT2)dos32$(PATHEXT2)extender$(PATHEXT2)hx$(PATHEXT2)dpmist32.bin)
+#export STUB
 
 DISTMAKE := $(realpath $(DISTROOT)$(PATHEXT2)src$(PATHEXT2)dist.mak)
 export DISTMAKE
 
-cleanDISTRIBUTE: copydir.exe restub.exe renseg.exe pepatch.exe
-	-del /Q $(DISTBIN)\*.pdb
+cleanDISTRIBUTE: copydir.exe
+	-$(DEL_KEEPDIR) $(DISTBIN)$(PATHEXT2)*.pdb 2> $(NULLDEV)
 ifndef NOMAKEDIR
 	-$(MKDIR) $(DISTROOT) 2> $(NULLDEV)
-#	-del /Q $(DISTROOT) 2> $(NULLDEV)
+#	-$(DEL_KEEPDIR) $(DISTROOT) 2> $(NULLDEV)
 #	-$(MKDIR) $(DISTROOT)$(PATHEXT2)rule 2> $(NULLDEV)
-#	-del /Q $(DISTROOT)$(PATHEXT2)rule 2> $(NULLDEV)
-	-$(MKDIR) $(DISTBIN) 2> $(NULLDEV)
-	-del /Q $(DISTBIN) 2> $(NULLDEV)
+#	-$(DEL_KEEPDIR) $(DISTROOT)$(PATHEXT2)rule 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTBIN) 2> $(NULLDEV)
+	-$(MKDIR) $(DISTBIN)
 #	-$(MKDIR) $(DISTBIN_8) 2> $(NULLDEV)
-#	-del /Q $(DISTBIN_8) 2> $(NULLDEV)
+#	-$(DEL_KEEPDIR) $(DISTBIN_8) 2> $(NULLDEV)
 #	-$(MKDIR) $(DISTBIN_8)$(PATHEXT2)branding 2> $(NULLDEV)
-#	-del /Q $(DISTBIN_8)$(PATHEXT2)branding 2> $(NULLDEV)
+#	-$(DEL_KEEPDIR) $(DISTBIN_8)$(PATHEXT2)branding 2> $(NULLDEV)
 #	-$(MKDIR) $(DISTBIN_7) 2> $(NULLDEV)
-#	-del /Q $(DISTBIN_7) 2> $(NULLDEV)
+#	-$(DEL_KEEPDIR) $(DISTBIN_7) 2> $(NULLDEV)
 #	-$(MKDIR) $(DISTBIN_7)$(PATHEXT2)branding 2> $(NULLDEV)
-#	-del /Q $(DISTBIN_7)$(PATHEXT2)branding 2> $(NULLDEV)
+#	-$(DEL_KEEPDIR) $(DISTBIN_7)$(PATHEXT2)branding 2> $(NULLDEV)
 	-$(MKDIR) $(DISTHELP) 2> $(NULLDEV)
-	-del /Q $(DISTHELP) 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTHELP) 2> $(NULLDEV)
 	-$(MKDIR) $(DISTINC) 2> $(NULLDEV)
-	-del /Q $(DISTINC) 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTINC) 2> $(NULLDEV)
 	-$(MKDIR) $(DISTINC)$(PATHEXT2)c 2> $(NULLDEV)
-	-del /Q $(DISTINC)$(PATHEXT2)c 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTINC)$(PATHEXT2)c 2> $(NULLDEV)
 	-$(MKDIR) $(DISTINC)$(PATHEXT2)support 2> $(NULLDEV)
-	-del /Q $(DISTINC)$(PATHEXT2)support 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTINC)$(PATHEXT2)support 2> $(NULLDEV)
 	-$(MKDIR) $(DISTINC)$(PATHEXT2)support$(PATHEXT2)win32 2> $(NULLDEV)
-	-del /Q $(DISTINC)$(PATHEXT2)support$(PATHEXT2)win32 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTINC)$(PATHEXT2)support$(PATHEXT2)win32 2> $(NULLDEV)
 	-$(MKDIR) $(DISTINC)$(PATHEXT2)c$(PATHEXT2)sys 2> $(NULLDEV)
-	-del /Q $(DISTINC)$(PATHEXT2)c$(PATHEXT2)sys 2> $(NULLDEV)
-	-del /Q $(DISTINC)$(PATHEXT2)sys 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTINC)$(PATHEXT2)c$(PATHEXT2)sys 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTINC)$(PATHEXT2)sys 2> $(NULLDEV)
 	-$(MKDIR) $(DISTINCWIN) 2> $(NULLDEV)
-	-del /Q $(DISTINCWIN) 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTINCWIN) 2> $(NULLDEV)
 	-$(MKDIR) $(DISTINCSTL) 2> $(NULLDEV)
-	-del /Q $(DISTINCSTL) 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTINCSTL) 2> $(NULLDEV)
 	-$(MKDIR) $(DISTINCSTL)$(PATHEXT2)stlport 2> $(NULLDEV)
-	-del /Q $(DISTINCSTL)$(PATHEXT2)stlport 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTINCSTL)$(PATHEXT2)stlport 2> $(NULLDEV)
 	-$(MKDIR) $(DISTINCSTL)$(PATHEXT2)stlport$(PATHEXT2)config 2> $(NULLDEV)
-	-del /Q $(DISTINCSTL)$(PATHEXT2)stlport$(PATHEXT2)config 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTINCSTL)$(PATHEXT2)stlport$(PATHEXT2)config 2> $(NULLDEV)
 	-$(MKDIR) $(DISTINCSTL)$(PATHEXT2)stlport$(PATHEXT2)debug 2> $(NULLDEV)
-	-del /Q $(DISTINCSTL)$(PATHEXT2)stlport$(PATHEXT2)debug 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTINCSTL)$(PATHEXT2)stlport$(PATHEXT2)debug 2> $(NULLDEV)
 	-$(MKDIR) $(DISTINCSTL)$(PATHEXT2)stlport$(PATHEXT2)pointers 2> $(NULLDEV)
-	-del /Q $(DISTINCSTL)$(PATHEXT2)stlport$(PATHEXT2)pointers 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTINCSTL)$(PATHEXT2)stlport$(PATHEXT2)pointers 2> $(NULLDEV)
 	-$(MKDIR) $(DISTINCSTL)$(PATHEXT2)using 2> $(NULLDEV)
-	-del /Q $(DISTINCSTL)$(PATHEXT2)using 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTINCSTL)$(PATHEXT2)using 2> $(NULLDEV)
 	-$(MKDIR) $(DISTINC)$(PATHEXT2)stl 2> $(NULLDEV)
-	-del /Q $(DISTINC)$(PATHEXT2)stl 2> $(NULLDEV)
-	-del /Q $(DISTLIB) 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTINC)$(PATHEXT2)stl 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTLIB) 2> $(NULLDEV)
 	-$(MKDIR) $(DISTSTARTUP) 2> $(NULLDEV)
-	-del /Q $(DISTSTARTUP) 2> $(NULLDEV)
-	-$(MKDIR) $(DISTSTARTUPDOS) 2> $(NULLDEV)
-	-del /Q $(DISTSTARTUPDOS) 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTSTARTUP) 2> $(NULLDEV)
+#	-$(MKDIR) $(DISTSTARTUPDOS) 2> $(NULLDEV)
+#	-$(DEL_KEEPDIR) $(DISTSTARTUPDOS) 2> $(NULLDEV)
 	-$(MKDIR) $(DISTSTARTUPWIN) 2> $(NULLDEV)
-	-del /Q $(DISTSTARTUPWIN) 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTSTARTUPWIN) 2> $(NULLDEV)
 	-$(MKDIR) $(DISTADDON) 2> $(NULLDEV)
-	-del /Q $(DISTADDON) 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTADDON) 2> $(NULLDEV)
 	-$(MKDIR) $(DISTEXAM) 2> $(NULLDEV)
-	-del /Q $(DISTEXAM) 2> $(NULLDEV)
-	-$(MKDIR) $(DISTEXAM)$(PATHEXT2)msdos 2> $(NULLDEV)
-	-del /Q $(DISTEXAM)$(PATHEXT2)msdos 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTEXAM) 2> $(NULLDEV)
+#	-$(MKDIR) $(DISTEXAM)$(PATHEXT2)msdos 2> $(NULLDEV)
+#	-$(DEL_KEEPDIR) $(DISTEXAM)$(PATHEXT2)msdos 2> $(NULLDEV)
 	-$(MKDIR) $(DISTEXAM)$(PATHEXT2)system 2> $(NULLDEV)
-	-del /Q $(DISTEXAM)$(PATHEXT2)system 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTEXAM)$(PATHEXT2)system 2> $(NULLDEV)
 	-$(MKDIR) $(DISTEXAM)$(PATHEXT2)c$(PATHEXT2)win32 2> $(NULLDEV)
-	-del /Q $(DISTEXAM)$(PATHEXT2)c$(PATHEXT2)win32 2> $(NULLDEV)
-	-del /Q $(DISTEXAM)$(PATHEXT2)win32 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTEXAM)$(PATHEXT2)c$(PATHEXT2)win32 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTEXAM)$(PATHEXT2)win32 2> $(NULLDEV)
 	-$(MKDIR) $(DISTEXAM)$(PATHEXT2)win32$(PATHEXT2)atc 2> $(NULLDEV)
-	-del /Q $(DISTEXAM)$(PATHEXT2)win32$(PATHEXT2)atc 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTEXAM)$(PATHEXT2)win32$(PATHEXT2)atc 2> $(NULLDEV)
 	-$(MKDIR) $(DISTEXAM)$(PATHEXT2)win32$(PATHEXT2)listview 2> $(NULLDEV)
-	-del /Q $(DISTEXAM)$(PATHEXT2)win32$(PATHEXT2)listview 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTEXAM)$(PATHEXT2)win32$(PATHEXT2)listview 2> $(NULLDEV)
 	-$(MKDIR) $(DISTEXAM)$(PATHEXT2)win32$(PATHEXT2)xmlview 2> $(NULLDEV)
-	-del /Q $(DISTEXAM)$(PATHEXT2)win32$(PATHEXT2)xmlview 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTEXAM)$(PATHEXT2)win32$(PATHEXT2)xmlview 2> $(NULLDEV)
 	-$(MKDIR) $(DISTEXAM)$(PATHEXT2)win32$(PATHEXT2)RCDemo 2> $(NULLDEV)
-	-del /Q $(DISTEXAM)$(PATHEXT2)win32$(PATHEXT2)RCDemo 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTEXAM)$(PATHEXT2)win32$(PATHEXT2)RCDemo 2> $(NULLDEV)
 	-$(MKDIR) $(DISTEXAM)$(PATHEXT2)win32$(PATHEXT2)huff 2> $(NULLDEV)
-	-del /Q $(DISTEXAM)$(PATHEXT2)win32$(PATHEXT2)huff 2> $(NULLDEV)
+	-$(DEL_KEEPDIR) $(DISTEXAM)$(PATHEXT2)win32$(PATHEXT2)huff 2> $(NULLDEV)
 	-$(MKDIR) $(DISTDIST) 2> $(NULLDEV)
 endif
 
 
 cleanstart:
-	-del /Q $(_LIBDIR)
-	-rmdir $(_LIBDIR)
+	-$(DEL) $(_LIBDIR) 2> $(NULLDEV)
+	-rmdir $(_LIBDIR) 2> $(NULLDEV)
 
 $(CLEANS): %.clean :
 	$(MAKE) clean -f $(_TREEROOT) -C$*
 
-clean: cleanstart $(CLEANS)
+cleanlib:
+#	$(MAKE) -C clibs clean
 
+clean: cleanstart cleanlib $(CLEANS)
+
+dist-clean:
+	$(DEL) $(DISTBIN) 2> $(NULLDEV)
+	$(DEL) $(DISTLIB) 2> $(NULLDEV)
+	$(DEL) $(DISTLIB)$(PATHEXT2)startup 2> $(NULLDEV)
+	$(DEL) $(DISTINC) 2> $(NULLDEV)
+	$(DEL) $(DISTINC)$(PATHEXT2)c 2> $(NULLDEV)
+	$(DEL) $(DISTINC)$(PATHEXT2)c$(PATHEXT2)win32 2> $(NULLDEV)
+	$(DEL) $(DISTINC)$(PATHEXT2)c$(PATHEXT2)sys 2> $(NULLDEV)
+      
 distribute: $(DISTS1)
 	$(MAKE) DISTRIBUTE
 else
@@ -274,7 +289,7 @@ $(CLEANS): %.clean :
 	$(MAKE) clean -f $(_TREEROOT) -C$*
 
 clean: del rmdir $(CLEANS)
-	del *.xcf *.xcppf *.xhf *.pdb
+	-del *.xcf *.xcppf *.xhf *.pdb 2> $(NULLDEV)
 
 distribute: $(DISTS1)
 
@@ -289,7 +304,7 @@ $(DISTS1): %.dist1 : $(DISTS)
 compare_exe:
 ifneq "$(MAIN_FILE)" ""
 ifeq "$(NO_COMPARE)" ""
-	$(COMPARER) $(DISTBIN)\..\temp2\$(DISTNAME).exe $(DISTBIN)\$(DISTNAME).exe
+	$(COMPARER) $(DISTBIN)$(PATHEXT2)..$(PATHEXT2)temp2$(PATHEXT2)$(DISTNAME).exe $(DISTBIN)$(PATHEXT2)$(DISTNAME).exe
 endif
 endif
 
@@ -302,19 +317,19 @@ zip:
 ifdef WITHMSDOS
 # this requires CC386 be installed since it relies on far pointer support
 # so I don't make it a part of the default install
-	@$(MAKE) -C$(DISTROOT)$(PATHEXT2)src$(PATHEXT2)..$(PATHEXT2) -f $(realpath .$(PATHEXT2)doszip.mak)
-	@$(MAKE) -C$(DISTROOT)$(PATHEXT2)src$(PATHEXT2)dos$(PATHEXT2)install -fmakefile.le
+#	@$(MAKE) -C$(DISTROOT)$(PATHEXT2)src$(PATHEXT2).. -f $(realpath .$(PATHEXT2)doszip.mak)
+#	@$(MAKE) -C$(DISTROOT)$(PATHEXT2)src$(PATHEXT2)dos$(PATHEXT2)install -fmakefile.le
 endif
-ifeq "$(COMPILER)" "gcc-linux"
-	@$(MAKE) -C/ -f $(realpath .$(PATHEXT2)zip.mak)
-else
-	@$(MAKE) -C\ -f $(realpath .$(PATHEXT2)zip.mak)
-endif
+	@$(MAKE) -f $(realpath .$(PATHEXT2)zip.mak)
 $(CDIRS): %.dirs :
 	-$(MKDIR) $*$(PATHEXT2)obj$(PATHEXT2)$(OBJ_IND_PATH) 2> $(NULLDEV)
 
+$(TOOLS): %.tools :
+	$(MAKE) tools  -f $(_TREEROOT) -C$*
+
 $(LIBS): %.library :
 	$(MAKE) library compile -f $(_TREEROOT) -C$*
+
 $(EXES): %.exefile : library
 	$(MAKE) exefile link -f $(_TREEROOT) -C$*
 
@@ -323,15 +338,18 @@ distribute_self:  cleanDISTRIBUTE
 distribute_exe: $(DISTS1)
 
 distribute_clibs_no_binary:
-	@$(MAKE) -Cclibs DISTRIBUTE --eval="BUILDENV=1"
+#	@$(MAKE) -Cclibs DISTRIBUTE --eval="BUILDENV=1"
 distribute_clibs:
-	@$(MAKE) -Cclibs DISTRIBUTE
+#	@$(MAKE) -Cclibs DISTRIBUTE
 
 
 makelibdir:
 	-$(MKDIR)  $(_LIBDIR) 2> $(NULLDEV)
 
-library: $(LIBS)
+
+lib1: | $(TOOLS)
+lib2: $(LIBS)
+library: | lib1 lib2
 
 exefile: $(EXES)
 
@@ -342,15 +360,15 @@ localfiles: createdirs
 
 %.xcppf: %.cpp
 	clang-format -style=file $< > $@
-	copy $@ $<
+	$(COPY) $@ $<
 
 %.xcf: %.c
 	clang-format -style=file $< > $@
-	copy $@ $<
+	$(COPY) $@ $<
 
 %.xhf: %.h
 	clang-format -style=file $< > $@
-	copy $@ $<
+	$(COPY) $@ $<
 
 
 $(FORMATS): %.format :

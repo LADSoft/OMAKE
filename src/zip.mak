@@ -1,6 +1,6 @@
 # Software License Agreement
 # 
-#     Copyright(C) 1994-2022 David Lindauer, (LADSoft)
+#     Copyright(C) 1994-2025 David Lindauer, (LADSoft)
 # 
 #     This file is part of the Orange C Compiler package.
 # 
@@ -20,29 +20,46 @@
 #     contact information:
 #         email: TouchStone222@runbox.com <David Lindauer>
 # 
+# 
 
 ifneq "$(COMPILER)" "gcc-linux"
 SHELL=cmd.exe
 endif
+#	$(ZIP) -r0 a $(DISTSRC) orangec/src/clibs/platform/dos32/extender/*.* orangec/src/clibs/platform/dos32/extender/*
 
 ZIP:="c:/program files/7-zip/7z" -tzip -bd
 
-OCC_VERSION := $(word 3, $(shell cmd /C type \omake\src\version.h))
+ifeq "$(GITHUB_WORKSPACE)" ""
+OCC_VERSION := $(word 3, $(shell cmd /C type orangec\src\version.h))
 OCC_VERSION := $(subst ",,$(OCC_VERSION))
 export OCC_VERSION
 VERNAME := $(subst .,,$(OCC_VERSION))
+endif
 
-DISTEXE=/omake/dist/ZippedBinaries$(VERNAME).zip
-DISTSRC=/omake/dist/ZippedSources$(VERNAME).zip
+DISTEXE=orangec/dist/ZippedBinaries$(VERNAME).zip
+DISTSRC=orangec/dist/ZippedSources$(VERNAME).zip
 
 DISTRIBUTE:
+	$(MAKE) -C..\.. -forangec\src\zip.mak maindist
+maindist:
+ifeq "$(WITHOUT_ZIP)" ""
 	-del $(subst /,\,$(DISTEXE))
 	-del $(subst /,\,$(DISTSRC))
-	$(ZIP) -r0 a $(DISTEXE) omake/omake.exe omake/doc/*
-	$(ZIP) a $(DISTEXE) omake/LICENSE.txt omake/copying
-	$(ZIP) -r0 -xr@omake/src/xclude.lst a $(DISTSRC) omake/src/*.adl omake/src/*.cpp omake/src/*.c omake/src/*.h omake/src/*.nas omake/src/*.ase omake/src/*.asi omake/src/*.inc omake/src/*.p omake/src/*.rc omake/src/*.spc omake/src/*.app omake/src/*.cfg omake/src/makefile* omake/src/*.mak omake/src/*.txt omake/src/copying omake/src/*.def omake/src/*.lst 
-	$(ZIP) a $(DISTSRC) omake/doc/*
-	$(ZIP) -r0 a $(DISTSRC) omake/src/*.vcxproj omake/src/*.vcxproj.filters omake/src/*.sln
-	$(ZIP) a $(DISTSRC) omake/src/*.exe omake/src/config.bat
-	$(ZIP) a $(DISTSRC) omake/src/LICENSE.TXT
-	$(ZIP) a $(DISTSRC) omake/src/copying
+	-mkdir $(DISTROOT)\appdata
+	$(ZIP) -r0 a $(DISTEXE) orangec/bin/*.exe orangec/bin/*.pdb orangec/bin/*.app orangec/bin/*.spc orangec/bin/*.dll orangec/bin/*.cfg  orangec/bin/general.props
+	$(ZIP) a $(DISTEXE) orangec/lib/*.* orangec/include/*.* orangec/examples/*.* orangec/doc/*.* orangec/license/*.* 
+	$(ZIP) a $(DISTEXE) orangec/lib/* orangec/include/* orangec/examples/* orangec/doc/* orangec/license/*
+	$(ZIP) d $(DISTEXE) orangec/doc/tools.htm
+	$(ZIP) a $(DISTEXE) orangec/rule/*.rul orangec/help/*.* orangec/addon/*.* orangec/appdata
+	$(ZIP) a $(DISTEXE) orangec/license.txt orangec/readme.txt orangec/relnotes.txt
+	$(ZIP) -r0 -xr@orangec/src/xclude.lst a $(DISTSRC) orangec/src/*.adl orangec/src/*.cpp orangec/src/*.c orangec/src/*.h orangec/src/*.nas orangec/src/*.ase orangec/src/*.asi orangec/src/*.inc orangec/src/*.p orangec/src/*.rc orangec/src/*.spc orangec/src/*.app orangec/src/*.cfg orangec/src/makefile* orangec/src/*.mak orangec/src/*.txt orangec/src/copying orangec/src/*.def orangec/src/*.lst 
+	$(ZIP) -r0 -xr@orangec/src/xclude.lst a $(DISTSRC) orangec/src/clibs/cpp/* orangec/src/clibs/platform/copyrght.asm orangec/src/help/*.* orangec/doc/*.*
+	$(ZIP) -r0 a $(DISTSRC) orangec/src/*.vcxproj orangec/src/*.vcxproj.filters orangec/src/*.sln
+	$(ZIP) a $(DISTSRC) orangec/src/*.exe orangec/src/*.iss orangec/src/*.bmp orangec/src/config.bat 
+	$(ZIP) a $(DISTSRC) orangec/src/LICENSE.TXT orangec/license/*.* orangec/src/readme.txt orangec/src/relnotes.txt
+	$(ZIP) a $(DISTSRC) orangec/src/clibs/repobj.bat orangec/src/copying orangec/src/addon.txt
+ifeq "$(GITHUB_WORKSPACE)" ""
+	"/program files (x86)/inno setup 6/iscc" /Q /FWindowsInstaller$(VERNAME) /Oorangec/dist orangec/src/occ.iss
+endif
+	-rmdir $(DISTROOT)\appdata
+endif

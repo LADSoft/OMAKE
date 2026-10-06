@@ -1,6 +1,6 @@
 # Software License Agreement
 # 
-#     Copyright(C) 1994-2022 David Lindauer, (LADSoft)
+#     Copyright(C) 1994-2025 David Lindauer, (LADSoft)
 # 
 #     This file is part of the Orange C Compiler package.
 # 
@@ -20,6 +20,7 @@
 #     contact information:
 #         email: TouchStone222@runbox.com <David Lindauer>
 # 
+# 
 
 ifeq "$(COMPILER)" "OCC"
 
@@ -28,7 +29,7 @@ OBJ_IND_PATH := occ
 
 CPP_deps = $(notdir $(CPP_DEPENDENCIES:.cpp=.o))
 C_deps = $(notdir $(C_DEPENDENCIES:.c=.o))
-ASM_deps = $(notdir $(ASM_DEPENDENCIES:.asm=.o))
+ASM_deps = $(notdir $(ASM_DEPENDENCIES:.s=.o))
 TASM_deps = $(notdir $(TASM_DEPENDENCIES:.asm=.o))
 RES_deps = $(notdir $(RC_DEPENDENCIES:.rc=.res))
 
@@ -51,13 +52,17 @@ DEBUGFLAG := /g
 endif
 
 ifeq "$(VIAASSEMBLY)" ""
-CCFLAGS = /c /E- /! $(DEBUGFLAG) -DTARGET_OS_WINDOWS
+CCFLAGS = /c /E- /! $(DEBUGFLAG)
 else
-CCFLAGS = /S /E- /! -DTARGET_OS_WINDOWS
+CCFLAGS = /S /E- /!
+endif
+
+ifeq "$(STD)" ""
+STD := --std:c++17
 endif
 
 LINK=$(COMPILER_PATH)\bin\olink
-LFLAGS=-c -mx /L$(_LIBDIR) /! $(DEBUGFLAG)
+LFLAGS=-c -mx /L$(_LIBDIR) /! $(DEBUGFLAG) $(MEMFLAGS)
 
 LIB=$(COMPILER_PATH)\bin\olib
 LIB_EXT:=.l
@@ -76,41 +81,41 @@ RCINCLUDE=$(DISTROOT)\include
 ifneq "$(INCLUDES)" ""
 CINCLUDES:=$(addprefix /I,$(INCLUDES))
 endif
+DEFINES := NDEBUG WIN32_LEAN_AND_MEAN TARGET_OS_WINDOWS $(DEFINES)
 DEFINES := $(addprefix /D,$(DEFINES))
 DEFINES := $(subst @, ,$(DEFINES))
 LIB_DEPENDENCIES := $(foreach file, $(addsuffix .l,$(LIB_DEPENDENCIES)), $(file))
 
 ifeq "$(TARGET)" "GUI"
 ifeq "$(LSCRTL)" ""
-STARTUP=C0pe.o
 TYPE=/T:GUI32
 COMPLIB=clwin$(LIB_EXT) climp$(LIB_EXT)
 else
-STARTUP=C0ls.o
 TYPE=/T:GUI32
 COMPLIB=lscrtl$(LIB_EXT) climp$(LIB_EXT)
 CCFLAGS:=$(CCFLAGS) /Wgl
 endif
 else
 ifeq "$(LSCRTL)" ""
-STARTUP=C0Xpe.o
 TYPE=/T:CON32
 COMPLIB=clwin$(LIB_EXT) climp$(LIB_EXT)
 else
-STARTUP=C0xls.o
 TYPE=/T:CON32
 COMPLIB=lscrtl$(LIB_EXT) climp$(LIB_EXT)
 CCFLAGS:=$(CCFLAGS) /Wcl
 endif
 endif
-CFLAGS := $(CCFLAGS) $(CINCLUDES) $(DEFINES) /DMICROSOFT /DWIN32
-CXXFLAGS := $(CCFLAGS) $(CINCLUDES) $(DEFINES) /DMICROSOFT /DWIN32
+CFLAGS := $(CCFLAGS) $(CINCLUDES) $(DEFINES)
+CXXFLAGS := $(CCFLAGS) $(CINCLUDES) $(DEFINES) $(STD)
 
 vpath %.o $(_OUTPUTDIR)
 vpath %.l $(_LIBDIR)
 vpath %.res $(_OUTPUTDIR)
 
 ifneq "$(OCCPR)" ""
+
+%.c: %.l #override the builtin rule for mingw64
+
 %.o: %.cpp
 	$(CC) $(CXXFLAGS) -o$(_OUTPUTDIR)/temp.ods $^
 	echo "" > $(_OUTPUTDIR)/$@
@@ -129,15 +134,15 @@ ifeq "$(VIAASSEMBLY)" ""
 
 else
 %.o: %.cpp
-	$(CC) $(CXXFLAGS) -o$(_OUTPUTDIR)/$*.asm $^
-	$(ASM) $(ASMFLAGS) -o$(_OUTPUTDIR)/$@ $(_OUTPUTDIR)/$*.asm
+	$(CC) $(CXXFLAGS) -o$(_OUTPUTDIR)/$*.s $^
+	$(ASM) $(ASMFLAGS) -o$(_OUTPUTDIR)/$@ $(_OUTPUTDIR)/$*.s
 %.o: %.c
-	$(CC) $(CFLAGS) -o$(_OUTPUTDIR)/$*.asm $^
-	$(ASM) $(ASMFLAGS) -o$(_OUTPUTDIR)/$@ $(_OUTPUTDIR)/$*.asm
+	$(CC) $(CFLAGS) -o$(_OUTPUTDIR)/$*.s $^
+	$(ASM) $(ASMFLAGS) -o$(_OUTPUTDIR)/$@ $(_OUTPUTDIR)/$*.s
 endif
 endif
 
-%.o: %.asm
+%.o: %.s
 	$(ASM) $(ASMFLAGS) -o$(_OUTPUTDIR)/$@ $^
 
 %.res: %.rc
@@ -153,7 +158,7 @@ endif
 
 $(NAME).exe: $(MAIN_DEPENDENCIES) $(LIB_DEPENDENCIES) $(_LIBDIR)\$(NAME)$(LIB_EXT) $(RES_deps)
 ifeq "$(OCCPR)" ""
-	$(LINK) /o$(NAME).exe $(TYPE) $(LFLAGS) $(STARTUP) $(addprefix $(_OUTPUTDIR)\,$(MAIN_DEPENDENCIES)) $(_LIBDIR)\$(NAME)$(LIB_EXT) $(LIB_DEPENDENCIES) $(COMPLIB) $(DEF_DEPENDENCIES) $(addprefix $(_OUTPUTDIR)\,$(RES_deps))
+	$(LINK) /o$(NAME).exe $(TYPE) $(LFLAGS) $(addprefix $(_OUTPUTDIR)\,$(MAIN_DEPENDENCIES)) $(_LIBDIR)\$(NAME)$(LIB_EXT) $(LIB_DEPENDENCIES) $(COMPLIB) $(DEF_DEPENDENCIES) $(addprefix $(_OUTPUTDIR)\,$(RES_deps))
 endif
 
 ifeq "$(OCCPR)" ""

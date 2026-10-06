@@ -1,6 +1,6 @@
 # Software License Agreement
 # 
-#     Copyright(C) 1994-2022 David Lindauer, (LADSoft)
+#     Copyright(C) 1994-2025 David Lindauer, (LADSoft)
 # 
 #     This file is part of the Orange C Compiler package.
 # 
@@ -19,6 +19,7 @@
 # 
 #     contact information:
 #         email: TouchStone222@runbox.com <David Lindauer>
+# 
 # 
 
 ifeq "$(COMPILER)" "MINGW64"
@@ -39,10 +40,10 @@ endif
 LLIB_DEPENDENCIES = $(notdir $(filter-out $(EXCLUDE) $(MAIN_DEPENDENCIES), $(CPP_deps) $(C_deps) $(ASM_deps) $(TASM_deps)))
 
 
-CC=x86_64-w64-mingw32-gcc
-CCFLAGS = -c -O2 -D__MSVCRT__ -D_MINGW -U__STRICT_ANSI__ -Wno-int-to-pointer-cast -DTARGET_OS_WINDOWS
+CC=g++
+CCFLAGS = -c -O2 -D__MSVCRT__ -D_MINGW -Wno-int-to-pointer-cast
 LINK=ld
-LFLAGS=-L$(_LIBDIR)
+LFLAGS=-L$(_LIBDIR) -Xlinker -Map=output.map
 
 LIB=ar
 LIBFLAGS=-r -s
@@ -59,17 +60,18 @@ ifneq "$(INCLUDES)" ""
 CINCLUDES:=$(addprefix -I,$(INCLUDES))
 endif
 
+DEFINES:= NDEBUG TARGET_OS_WINDOWS HAVE_C99INCLUDES $(DEFINES)
 DEFINES:=$(addprefix -D,$(DEFINES))
 DEFINES:=$(subst @, ,$(DEFINES))
 
-CFLAGS := $(CCFLAGS) $(CINCLUDES) $(DEFINES) -DGNUC -DWIN32 -D_WIN32_IE=0x600 -D_WIN32_WINNT=0x500 -DWINVER=0x500 -D_WIN32
-CXXFLAGS = -std=c++14 -fpermissive $(CCFLAGS) $(CINCLUDES) $(DEFINES) -DGNUC -DWIN32 -D_WIN32_IE=0x600 -D_WIN32_WINNT=0x500 -DWINVER=0x500 -D_WIN32
+CFLAGS := $(CCFLAGS) $(CINCLUDES) $(DEFINES) -x c -DGNUC -D_WIN32_IE=0x600 -D_WIN32_WINNT=0x500 -DWINVER=0x500 -D_WIN32 -Dx64_compiler 
+CXXFLAGS = -std=c++17 -fpermissive $(CCFLAGS) -x c++ $(CINCLUDES) $(DEFINES) -DGNUC -D_WIN32_IE=0x600 -D_WIN32_WINNT=0x500 -DWINVER=0x500 -D_WIN32 -Dx64_compiler
 
 ifeq "$(TARGET)" "GUI"
 LFLAGS := $(LFLAGS) -s -Wl,--subsystem,windows
 endif
 
-COMPLIB=-lstdc++ -lcomctl32 -lgdi32 -lcomdlg32 -lole32 -luxtheme -lkernel32 -lmsimg32 -luuid
+COMPLIB=-lcomctl32 -lgdi32 -lcomdlg32 -lole32 -luxtheme -lkernel32 -lmsimg32 -luuid
 
 
 vpath %.o $(_OUTPUTDIR)

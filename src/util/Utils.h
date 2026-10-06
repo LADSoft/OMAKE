@@ -1,25 +1,26 @@
 /* Software License Agreement
- * 
- *     Copyright(C) 1994-2023 David Lindauer, (LADSoft)
- * 
+ *
+ *     Copyright(C) 1994-2025 David Lindauer, (LADSoft)
+ *
  *     This file is part of the Orange C Compiler package.
- * 
+ *
  *     The Orange C Compiler package is free software: you can redistribute it and/or modify
  *     it under the terms of the GNU General Public License as published by
  *     the Free Software Foundation, either version 3 of the License, or
  *     (at your option) any later version.
- * 
+ *
  *     The Orange C Compiler package is distributed in the hope that it will be useful,
  *     but WITHOUT ANY WARRANTY; without even the implied warranty of
  *     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *     GNU General Public License for more details.
- * 
+ *
  *     You should have received a copy of the GNU General Public License
  *     along with Orange C.  If not, see <http://www.gnu.org/licenses/>.
- * 
+ *
  *     contact information:
  *         email: TouchStone222@runbox.com <David Lindauer>
- * 
+ *
+ *
  */
 
 #ifndef UTIL_H
@@ -35,6 +36,20 @@
 #ifdef TARGET_OS_WINDOWS
 #    include "io.h"
 #endif
+#include <sys/stat.h>
+
+#define MAINTRY try
+#define MAINCATCH                                \
+    catch (std::exception & e)                   \
+    {                                            \
+        printf("Fatal: caught: %s\n", e.what()); \
+        return 3;                                \
+    }                                            \
+    catch (...)                                  \
+    {                                            \
+        printf("Fatal: caught something...");    \
+        return 3;                                \
+    }
 
 class Utils
 {
@@ -43,6 +58,7 @@ class Utils
     {
         fprintf(stderr, "Fatal error: ");
         fputs(format, stderr);
+        fflush(stderr);
         if (cleanup)
             cleanup();
         exit(1);
@@ -53,6 +69,7 @@ class Utils
         fprintf(stderr, "Fatal error: ");
         fprintf(stderr, format, arg...);
         fputc('\n', stderr);
+        fflush(stderr);
         if (cleanup)
             cleanup();
         exit(1);
@@ -64,6 +81,18 @@ class Utils
         Fatal(format.c_str(), arg...);
     }
     static bool HasLocalExe(const std::string& exeName);
+    static size_t file_size(const std::string& file)
+    {
+        struct stat stats;
+        if (!stat(file.c_str(), &stats))
+        {
+            return stats.st_size;
+        }
+        else
+        {
+            return 0;
+        }
+    }
     static void SetCleanup(void(Cleanup)()) { cleanup = Cleanup; }
     static char* GetModuleName();
     static void SetEnvironmentToPathParent(const char* name);
@@ -83,6 +112,7 @@ class Utils
     static void StripExt(char* buffer);
     static bool HasExt(const char* buffer, const char* ext);
     static bool FileExists(const char* buffer);
+    static bool FileExists(const std::string& buffer) { return FileExists(buffer.c_str()); }
     static std::string FindOnPath(const std::string& name, const std::string& path);
     static std::vector<std::string> split(const std::string& strToSplit, char delimeter = ';');
     static void ReplaceAll(std::string& str, const std::string& from, const std::string& to);
@@ -102,25 +132,32 @@ class Utils
 
     static unsigned Random(unsigned);
 
-    static char* StrCpy(char* data, size_t len, const char* source)
+    static char* StrCpy(char* data, int len, const char* source)
     {
-        strncpy(data, source, len);
-        data[len - 1] = '\0';
+        if (len <= 0)
+            return data;
+        int n = strlen(source);
+        if (n > len - 1)
+            n = len - 1;
+        memcpy(data, source, n);
+        data[n] = '\0';
         return data;
     }
-    template <size_t len>
+    template <int len>
     static char* StrCpy(char (&data)[len], const char* source)
     {
         return StrCpy(data, len, source);
     }
-    static char* StrCat(char* data, size_t len, const char* source)
+    static char* StrCat(char* data, int len, const char* source)
     {
+        if (len <= 0)
+            return data;
         int num = (int)len - (int)strlen(data) - 1;
         if (num > 0)
             strncat(data, source, num);
         return data;
     }
-    template <size_t len>
+    template <int len>
     static char* StrCat(char (&data)[len], const char* source)
     {
         return StrCat(data, len, source);

@@ -1,6 +1,6 @@
 # Software License Agreement
 # 
-#     Copyright(C) 1994-2022 David Lindauer, (LADSoft)
+#     Copyright(C) 1994-2025 David Lindauer, (LADSoft)
 # 
 #     This file is part of the Orange C Compiler package.
 # 
@@ -20,21 +20,24 @@
 #     contact information:
 #         email: TouchStone222@runbox.com <David Lindauer>
 # 
+# 
 
 ifndef DISTNAME
 DISTNAME = $(NAME)
 endif
 
-stubexe:
-#	$(RESTUB) $(DISTBIN)\$(DISTNAME).exe $(STUB)
-#	upx $(DISTBIN)\$(DISTNAME).exe
-#	$(RENSEG) $(DISTBIN)\$(DISTNAME).exe
+ifeq "$(COMPILER)" "gcc-linux"
 distcopy:
-	copy $(RELEASEPATH)\$(NAME).exe $(DISTBIN)\$(DISTNAME).exe
+	$(COPY) $(RELEASEPATH)$(PATHEXT2)$(NAME) $(DISTBIN)$(PATHEXT2)$(DISTNAME)
+else
+distcopy:
+	$(COPY) $(RELEASEPATH)$(PATHEXT2)$(NAME).exe $(DISTBIN)$(PATHEXT2)$(DISTNAME).exe
+endif
+
 ifeq "$(COMPILER)" "MS"
 ifneq "$(MSPDB)" ""
-	-copy $(RELEASEPATH)\$(NAME).pdb $(DISTBIN)\$(DISTNAME).pdb
+	-$(COPY) $(RELEASEPATH)$(PATHEXT2)$(NAME).pdb $(DISTBIN)$(PATHEXT2)$(DISTNAME).pdb
 endif
 endif
-copyexe: distcopy stubexe
+copyexe: distcopy
 
